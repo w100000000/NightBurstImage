@@ -1,0 +1,56 @@
+save_mode: epoch
+save_by_epoch: 1
+cudnn_benchmark: True
+
+Training_config:
+  phase: unified                    # 单阶段训练（不再分 deblur/denoise）
+  epochs: 200
+  train_batch_size: 2
+  val_batch_size: 1
+  num_workers: 8
+  start_idx: 0
+  show_loss_iter: 100
+  show_img_iter: 2000
+
+GNet:
+  name: 'D2HNet_RK'
+  init_type: 'kaiming'
+  init_gain: 0.02
+  finetune_path: ''
+  force_load: False
+  args:
+    in_channel: 4                   # 每帧 RAW 通道数（OV13855 RGGB = 4）
+    out_channel: 3                  # 输出 RGB 3 通道
+    ngf: 10                         # 基础通道数（轻量化设计）
+    activ: 'lrelu'                  # 激活函数：LeakyReLU
+    norm: 'none'                    # 归一化：不用（轻量化）
+    pad_type: 'zero'                # 填充方式：零填充
+    final_activ: 'none'             # 最终激活函数（'none' 或 'tanh'）
+    res_num: 2                      # 编码器/解码器每级残差块数
+    bottleneck_res_num: 4           # 瓶颈层残差块数
+
+Loss:
+  L1Loss:
+    weight: 100.0
+    mode: 'l1'
+
+Optimizer:
+  name: 'Adam'
+  args:
+    lr_g: 0.0002
+    b1: 0.5
+    b2: 0.999
+    weight_decay: 0.0
+  lr_decrease_mode: 'epoch'
+  lr_decrease_epoch: 80
+  lr_decrease_factor: 0.5
+
+Dataset:
+  train_path: './data/raw/train'
+  val_path: './data/raw/val'
+  input_format: 'raw_rggb'         # 输入格式：4 通道 RGGB
+  gt_format: 'rgb'                 # GT 格式：RGB PNG
+  noise_aug: False                 # RAW 数据已有噪声，不需要额外加噪
+  random_crop: True
+  crop_size: 256                   # 裁剪尺寸（必须是 8 的倍数）
+  patch_per_image: 4
