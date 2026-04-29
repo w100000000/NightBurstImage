@@ -629,3 +629,135 @@ class UnifiedTrainer(TrainingModule):
         self.G.train()
 
         print('val: epoch: %d, psnr: %.3f, ssim: %.3f' % (epoch, val_PSNR, val_SSIM))
+
+
+class DistillTrainer(UnifiedTrainer):
+    """蒸馏训练器：用 teacher (D2HNet_RK ngf=32) 指导 student (D2HNet_RK ngf=10)
+
+    与 UnifiedTrainer 的区别：
+    1. 加载冻结的 teacher 模型
+    2. 训练时同时计算 GT loss 和蒸馏 loss
+    3. 验证时同时报告 student 和 teacher 的指标
+    """
+
+    def __init__(self, opt, num_gpus, rank=None, world_size=None):
+        super(DistillTrainer, self).__init__(opt=opt, num_gpus=num_gpus,
+                                             rank=rank, world_size=world_size)
+
+        # 加载冻结的 teacher 模型
+        teacher_opt = self.opt.Teacher
+        self.teacher = create_generator_val(teacher_opt, teacher_opt.finetune_path)
+        self.teacher = self.wrapper(self.teacher)
+        self.teacher.eval()
+        for p in self.teacher.parameters():
+            p.requires_grad = False
+
+        # 蒸馏 loss 权重
+        self.w_hard = self.opt.Distill.hard_weight
+        self.w_soft = self.opt.Distill.soft_weight
+
+        print('DistillTrainer: teacher loaded from %s' % teacher_opt.finetune_path)
+        print('  hard=%.2f, soft=%.2f' % (self.w_hard, self.w_soft))
+
+    def train(self):
+        iters_done = 0
+
+        for epoch in range(self.Training_config.start_idx + 1, self.Training_config.epochs):
+            print('epoch', epoch)
+
+            for param_group in self.optim_G.param_groups:
+                self.add_scalar('lr', param_group['lr'], epoch)
+
+            for i, data in enumerate(self.train_loader):
+                print(i, self.device)
+
+                # ============= Get data ==============
+                short1 = data['short1_raw'].to(self.device)
+                long = data['long_raw'].to(self.device)
+                short2 = data['short2_raw'].to(self.device)
+                gt = data['RGBout_img'].to(self.device)
+
+                # ============ Student forward ==========
+                student_out = self.G(short1, long, short2)
+
+                # ============ Teacher forward ==========
+                with torch.no_grad():
+                    teacher_out = self.teacher(short1, long, short2)
+
+                # ============== Loss ===================
+                L_hard = F.l1_loss(student_out, gt)
+                L_soft = F.l1_loss(student_out, teacher_out.detach())
+                G_loss = self.w_hard * L_hard + self.w_soft * L_soft
+
+                loss_info = {
+                    'L_hard': round(self.w_hard * L_hard.item(), 5),
+                    'L_soft': round(self.w_soft * L_soft.item(), 5),
+                }
+
+                # ============ backward =================
+                self.optim_G.zero_grad()
+                G_loss.backward()
+                self.optim_G.step()
+
+                # ============ record ===================
+                if iters_done % self.Training_config.show_loss_iter == 0:
+                    self.add_scalars(main_tag='G_loss', tag_scalar_dict=loss_info, global_step=iters_done)
+                if iters_done % self.Training_config.show_img_iter == 0:
+                    vis_imgs = [long, gt, teacher_out.clamp(0.0, 1.0), student_out.clamp(0.0, 1.0)]
+                    self.visual_image('train_img', vis_imgs, iters_done)
+
+                self._save_G(self.opt, epoch, iters_done, len(self.train_loader), self.G)
+                self._adjust_learning_rate(self.optim_config, (epoch + 1), iters_done,
+                                           self.optim_G, self.opt.Optimizer.args.lr_g)
+
+                iters_done += 1
+
+            self._validate(epoch)
+
+    def _validate(self, epoch):
+        self.G.eval()
+        val_PSNR, val_SSIM, num_of_val_image = 0, 0, 0
+        teacher_PSNR, teacher_SSIM = 0, 0
+
+        for j, data in enumerate(self.val_loader):
+            short1 = data['short1_raw'].to(self.device)
+            long = data['long_raw'].to(self.device)
+            short2 = data['short2_raw'].to(self.device)
+            gt = data['RGBout_img'].to(self.device)
+
+            with torch.no_grad():
+                student_out = self.G(short1, long, short2)
+                teacher_out = self.teacher(short1, long, short2)
+
+            if isinstance(student_out, list):
+                student_out = student_out[0]
+            if isinstance(teacher_out, list):
+                teacher_out = teacher_out[0]
+
+            student_out = student_out.clamp(0.0, 1.0)
+            teacher_out = teacher_out.clamp(0.0, 1.0)
+
+            n = student_out.shape[0]
+            num_of_val_image += n
+            val_PSNR += utils.psnr(student_out, gt, 1) * n
+            val_SSIM += utils.ssim(student_out, gt) * n
+            teacher_PSNR += utils.psnr(teacher_out, gt, 1) * n
+            teacher_SSIM += utils.ssim(teacher_out, gt) * n
+
+            if j % 10 == 0:
+                print('val: %d | epoch: %d' % (j, epoch))
+
+        val_PSNR /= num_of_val_image
+        val_SSIM /= num_of_val_image
+        teacher_PSNR /= num_of_val_image
+        teacher_SSIM /= num_of_val_image
+
+        self.add_scalar('val_PSNR', val_PSNR, global_step=epoch)
+        self.add_scalar('val_SSIM', val_SSIM, global_step=epoch)
+        self.add_scalar('teacher_PSNR', teacher_PSNR, global_step=epoch)
+        self.add_scalar('teacher_SSIM', teacher_SSIM, global_step=epoch)
+
+        self.G.train()
+
+        print('val: epoch: %d | student psnr: %.3f ssim: %.3f | teacher psnr: %.3f ssim: %.3f'
+              % (epoch, val_PSNR, val_SSIM, teacher_PSNR, teacher_SSIM))
