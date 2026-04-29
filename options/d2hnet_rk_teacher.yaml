@@ -1,0 +1,55 @@
+save_mode: epoch
+save_by_epoch: 1
+cudnn_benchmark: True
+
+Training_config:
+  phase: unified                    # 用 UnifiedTrainer 训练 teacher
+  epochs: 200
+  train_batch_size: 2
+  val_batch_size: 1
+  num_workers: 8
+  start_idx: 0
+  show_loss_iter: 100
+  show_img_iter: 2000
+
+GNet:
+  name: 'D2HNet_RK'
+  init_type: 'kaiming'
+  init_gain: 0.02
+  finetune_path: ''
+  force_load: False
+  args:
+    in_channel: 4                   # RAW RGGB 4 通道
+    out_channel: 3                  # 输出 RGB
+    ngf: 32                         # teacher 用大通道数（student 用 10）
+    activ: 'lrelu'
+    norm: 'none'
+    pad_type: 'zero'
+    final_activ: 'none'
+    res_num: 4                      # 每级 4 个残差块（student 用 2）
+    bottleneck_res_num: 8           # 瓶颈层 8 个残差块（student 用 4）
+
+Loss:
+  L1Loss:
+    weight: 100.0
+
+Optimizer:
+  name: 'Adam'
+  args:
+    lr_g: 0.0002
+    b1: 0.5
+    b2: 0.999
+    weight_decay: 0.0
+  lr_decrease_mode: 'epoch'
+  lr_decrease_epoch: 80
+  lr_decrease_factor: 0.5
+
+Dataset:
+  train_path: './data/raw/train'
+  val_path: './data/raw/val'
+  input_format: 'raw_rggb'
+  gt_format: 'rgb'
+  noise_aug: False
+  random_crop: True
+  crop_size: 256
+  patch_per_image: 4
