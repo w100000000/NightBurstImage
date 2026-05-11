@@ -22,7 +22,7 @@ GNet:
     in_channel: 4                   # 每帧 RAW 通道数（OV13855 RGGB = 4）
     out_channel: 3                  # 输出 RGB 3 通道
     ngf: 10                         # 基础通道数（轻量化设计）
-    activ: 'lrelu'                  # 激活函数：LeakyReLU
+    activ: 'relu'                   # 激活函数：ReLU（RK3588 NPU 硬件加速）
     norm: 'none'                    # 归一化：不用（轻量化）
     pad_type: 'zero'                # 填充方式：零填充
     final_activ: 'none'             # 最终激活函数（'none' 或 'tanh'）
@@ -50,7 +50,8 @@ Dataset:
   val_path: './data/raw/val'
   input_format: 'raw_rggb'         # 输入格式：4 通道 RGGB
   gt_format: 'rgb'                 # GT 格式：RGB PNG
+  black_level: 64                  # OV13855 10-bit 黑电平
   noise_aug: False                 # RAW 数据已有噪声，不需要额外加噪
   random_crop: True
-  crop_size: 256                   # 裁剪尺寸（必须是 8 的倍数）
+  crop_size: 256                   # RAW RGGB 平面裁剪尺寸（必须是 8 的倍数）
   patch_per_image: 4

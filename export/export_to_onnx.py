@@ -8,9 +8,10 @@ D2HNet_RK ONNX 导出脚本
         --height 540 --width 960
 
 说明:
-    - RAW 输入分辨率是 sRGB 的一半（Bayer 2x2 块）
-    - 1080p (1920x1080) 对应 RAW 输入 960x540
-    - 输出是全分辨率 RGB 1920x1080
+    - RAW 输入分辨率是 sRGB 的一半（Bayer 2x2 RGGB pack）
+    - 1080p (1920x1080) 对应 RAW RGGB 输入 540x960
+    - 网络内部 PixelShuffle(2) 实现 demosaic 2x 上采样
+    - 输出是全分辨率 RGB 1080x1920
 """
 
 import argparse
@@ -41,7 +42,7 @@ def export_to_onnx(model_path, output_path, height=540, width=960, opset=11):
         'in_channel': 4,
         'out_channel': 3,
         'ngf': 10,
-        'activ': 'lrelu',
+        'activ': 'relu',
         'norm': 'none',
         'pad_type': 'zero',
         'final_activ': 'none',
@@ -62,29 +63,23 @@ def export_to_onnx(model_path, output_path, height=540, width=960, opset=11):
     total_params = sum(p.numel() for p in model.parameters())
     print('Model params: %.2fK' % (total_params / 1000))
 
-    # 创建 dummy 输入（3 帧 RAW Bayer，半分辨率）
-    dummy_short1 = torch.randn(1, 4, height, width)
+    # 创建 dummy 输入：short_cat [1,8,H,W]（两短帧拼接）+ long [1,4,H,W]
+    dummy_short_cat = torch.randn(1, 8, height, width)
     dummy_long = torch.randn(1, 4, height, width)
-    dummy_short2 = torch.randn(1, 4, height, width)
 
-    # 导出 ONNX
+    # 导出 ONNX（固定分辨率，RKNN 不支持动态 shape）
     print('Exporting to ONNX: %s' % output_path)
-    print('  Input shape: [1, 4, %d, %d] (RAW Bayer, half-res)' % (height, width))
-    print('  Output shape: [1, 3, %d, %d] (RGB, full-res)' % (height * 2, width * 2))
+    print('  Input 1 (short_cat): [1, 8, %d, %d] (2x RAW RGGB concatenated)' % (height, width))
+    print('  Input 2 (long_raw):  [1, 4, %d, %d] (RAW RGGB)' % (height, width))
+    print('  Output:              [1, 3, %d, %d] (RGB full resolution)' % (height * 2, width * 2))
 
     torch.onnx.export(
         model,
-        (dummy_short1, dummy_long, dummy_short2),
+        (dummy_short_cat, dummy_long),
         output_path,
         opset_version=opset,
-        input_names=['short1_raw', 'long_raw', 'short2_raw'],
+        input_names=['short_cat', 'long_raw'],
         output_names=['output'],
-        dynamic_axes={
-            'short1_raw': {0: 'batch'},
-            'long_raw': {0: 'batch'},
-            'short2_raw': {0: 'batch'},
-            'output': {0: 'batch'},
-        },
     )
     print('ONNX export done: %s' % output_path)
 
@@ -93,15 +88,16 @@ def export_to_onnx(model_path, output_path, height=540, width=960, opset=11):
         import onnxruntime as ort
         sess = ort.InferenceSession(output_path)
         ort_inputs = {
-            'short1_raw': dummy_short1.numpy(),
+            'short_cat': dummy_short_cat.numpy(),
             'long_raw': dummy_long.numpy(),
-            'short2_raw': dummy_short2.numpy(),
         }
         ort_out = sess.run(None, ort_inputs)[0]
+        print('ONNX output shape: %s (expected [1, 3, %d, %d])' % (
+            str(ort_out.shape), height * 2, width * 2))
 
         # PyTorch 推理
         with torch.no_grad():
-            pt_out = model(dummy_short1, dummy_long, dummy_short2).numpy()
+            pt_out = model(dummy_short_cat, dummy_long).numpy()
 
         diff = np.max(np.abs(pt_out - ort_out))
         print('ONNX validation: max diff = %.6f (should be < 1e-4)' % diff)

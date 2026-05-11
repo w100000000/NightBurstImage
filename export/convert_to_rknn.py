@@ -24,16 +24,19 @@ import glob
 import numpy as np
 
 
-def collect_calibration_data(calib_dir, max_samples=200):
+def collect_calibration_data(calib_dir, max_samples=200, height=540, width=960):
     """收集校准数据
 
     扫描目录下的 .npy 文件（RAW 4ch float32），用于 INT8 量化校准。
+    返回双输入格式: [(short_cat, long_raw), ...] 用于多输入模型。
 
     参数:
         calib_dir: 校准数据目录，包含 .npy 文件
         max_samples: 最大样本数
+        height: RAW RGGB 平面高度
+        width: RAW RGGB 平面宽度
     返回:
-        list of numpy arrays, each [4, H, W]
+        list of tuples, each (short_cat[8,H,W], long_raw[4,H,W])
     """
     npy_files = sorted(glob.glob(os.path.join(calib_dir, '*.npy')))
     if len(npy_files) == 0:
@@ -44,7 +47,9 @@ def collect_calibration_data(calib_dir, max_samples=200):
             print('Generating random calibration data for testing...')
             data_list = []
             for _ in range(max_samples):
-                data_list.append(np.random.randn(4, 540, 960).astype(np.float32))
+                short_cat = np.random.rand(1, 8, height, width).astype(np.float32)
+                long_raw = np.random.rand(1, 4, height, width).astype(np.float32)
+                data_list.append({'short_cat': short_cat, 'long_raw': long_raw})
             return data_list
         npy_files = raw_files[:max_samples]
 
@@ -53,12 +58,14 @@ def collect_calibration_data(calib_dir, max_samples=200):
         if f.endswith('.npy'):
             data = np.load(f)
         else:
-            # .raw 文件: 假设已解包为 [4, H, W] float32
-            data = np.fromfile(f, dtype=np.float32).reshape(4, -1, -1)
-        # 取其中一帧（校准只需要输入数据，不需要 GT）
+            data = np.fromfile(f, dtype=np.float32).reshape(4, height, width)
         if data.ndim == 4:
             data = data[0]  # [4, H, W]
-        data_list.append(data.astype(np.float32))
+        # 构造双输入校准样本
+        short_cat = np.concatenate([data, data], axis=0)[np.newaxis]  # [1, 8, H, W]
+        long_raw = data[np.newaxis]  # [1, 4, H, W]
+        data_list.append({'short_cat': short_cat.astype(np.float32),
+                          'long_raw': long_raw.astype(np.float32)})
 
     print('Collected %d calibration samples from %s' % (len(data_list), calib_dir))
     return data_list
@@ -92,10 +99,9 @@ def convert_onnx_to_rknn(onnx_path, output_path, calib_dir, target='rk3588',
     # ========================
     print('Configuring RKNN...')
     rknn.config(
-        mean_values=[[0, 0, 0, 0]],      # RAW 输入不做均值归一化
-        std_values=[[1023, 1023, 1023, 1023]],  # 10-bit RAW 归一化到 [0,1]
+        mean_values=[[0]*8, [0]*4],       # 两个输入: short_cat(8ch), long_raw(4ch)
+        std_values=[[1]*8, [1]*4],        # 训练已归一化到[0,1]，RKNN不再归一化
         target_platform=target,
-        # quantized_dtype='asymmetric_quantized-8',  # 默认 INT8
     )
 
     # ========================
@@ -113,7 +119,7 @@ def convert_onnx_to_rknn(onnx_path, output_path, calib_dir, target='rk3588',
     print('Building RKNN model...')
     calib_data = None
     if do_quantize:
-        calib_data = collect_calibration_data(calib_dir)
+        calib_data = collect_calibration_data(calib_dir, height=height, width=width)
 
     ret = rknn.build(
         do_quantization=do_quantize,

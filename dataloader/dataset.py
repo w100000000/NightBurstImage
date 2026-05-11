@@ -841,39 +841,50 @@ class TP_dataset_v1(TP_dataset):
 
 
 class RAW3RGB_dataset(data.Dataset):
-    """RAW 域三帧融合数据集骨架
+    """RAW 域三帧融合数据集
 
     加载 3 帧 RAW（短1-长-短2）+ 1 帧 RGB GT。
-    数据集尚未采集，先用随机数据占位，后续填充实际加载逻辑。
+    RAW 格式：V4L2 SGRBG10P（OV13855, 10-bit packed Bayer, GRBG 排列）。
+
+    目录结构:
+        data/raw/train/scene001/short1.raw   # V4L2 SGRBG10P packed
+        data/raw/train/scene001/long.raw
+        data/raw/train/scene001/short2.raw
+        data/raw/train/scene001/gt.png       # sRGB GT（全分辨率）
+
+    分辨率约定:
+        crop_size 表示网络处理分辨率（RAW RGGB 平面分辨率）。
+        网络输入 [B, 4, crop_size, crop_size]，输出 [B, 3, crop_size, crop_size]。
+        GT 在加载后 resize 到 crop_size 以匹配网络输出。
     """
 
     def __init__(self, dataset_opt, tag):
         self.opt = dataset_opt
         self.tag = tag
-        self.crop_size = getattr(self.opt, 'crop_size', 256)
+        self.crop_size = getattr(self.opt, 'crop_size', 256)    # 网络处理分辨率（RAW RGGB 平面尺寸）
         self.patch_per_image = getattr(self.opt, 'patch_per_image', 4)
         self.random_crop = getattr(self.opt, 'random_crop', True)
+        # RAW 图像宽高（从 meta.txt 读取，或使用默认值 1920x1080）
+        self.raw_width = getattr(self.opt, 'raw_width', 1920)
+        self.raw_height = getattr(self.opt, 'raw_height', 1080)
+        self.black_level = getattr(self.opt, 'black_level', 64)
 
         if tag == 'train':
             base_path = self.opt.train_path
         else:
             base_path = self.opt.val_path
 
-        # TODO: 扫描数据目录，建立文件列表
-        # 实际数据加载逻辑待数据集采集好后填充
-        # 目录结构示例:
-        #   data/raw/train/scene001/short1.raw
-        #   data/raw/train/scene001/long.raw
-        #   data/raw/train/scene001/short2.raw
-        #   data/raw/train/scene001/gt.png
+        # 扫描数据目录
         self.file_list = []
         if os.path.exists(base_path):
             for scene_dir in sorted(os.listdir(base_path)):
                 scene_path = os.path.join(base_path, scene_dir)
                 if os.path.isdir(scene_path):
-                    self.file_list.append(scene_path)
+                    # 检查必要文件是否存在
+                    required = ['short1.raw', 'long.raw', 'short2.raw', 'gt.png']
+                    if all(os.path.exists(os.path.join(scene_path, f)) for f in required):
+                        self.file_list.append(scene_path)
 
-        # 如果没有真实数据，用占位长度让 DataLoader 不报错
         if len(self.file_list) == 0:
             self.file_list = ['placeholder'] * 100
             self.use_random = True
@@ -883,6 +894,76 @@ class RAW3RGB_dataset(data.Dataset):
 
         print('%s === RAW3RGB_dataset samples: %d' % (tag, len(self.file_list)))
 
+    @staticmethod
+    def unpack_sgrbg10p(raw_bytes, width, height, black_level=64):
+        """解包 V4L2 SGRBG10P 格式（OV13855 输出）
+
+        10-bit packed: 每 5 字节存 4 个像素。
+        存储顺序（小端）:
+            byte0 = pix0[9:2], byte1 = pix1[9:2],
+            byte2 = pix2[9:2], byte3 = pix3[9:2],
+            byte4 = pix3[1:0]<<6 | pix2[1:0]<<4 | pix1[1:0]<<2 | pix0[1:0]
+
+        参数:
+            raw_bytes: 原始字节 (np.uint8)
+            width: 图像宽度（像素数）
+            height: 图像高度
+            black_level: 黑电平值（OV13855 典型值 64 @ 10bit）
+        返回:
+            bayer: [height, width] float32, [0, 1]
+        """
+        total_pixels = width * height
+        # 每 5 字节解出 4 个像素
+        num_groups = total_pixels // 4
+        raw_bytes = raw_bytes[:num_groups * 5]
+
+        # reshape 为 [N, 5]
+        data = raw_bytes.reshape(num_groups, 5)
+
+        # 高 8 位
+        p0_h = data[:, 0].astype(np.uint16)
+        p1_h = data[:, 1].astype(np.uint16)
+        p2_h = data[:, 2].astype(np.uint16)
+        p3_h = data[:, 3].astype(np.uint16)
+
+        # 低 2 位（从 byte4 解包）
+        byte4 = data[:, 4]
+        p0_l = (byte4 >> 0) & 0x03
+        p1_l = (byte4 >> 2) & 0x03
+        p2_l = (byte4 >> 4) & 0x03
+        p3_l = (byte4 >> 6) & 0x03
+
+        # 合成 10-bit 值
+        pixels = np.zeros(total_pixels, dtype=np.uint16)
+        pixels[0::4] = (p0_h << 2) | p0_l
+        pixels[1::4] = (p1_h << 2) | p1_l
+        pixels[2::4] = (p2_h << 2) | p2_l
+        pixels[3::4] = (p3_h << 2) | p3_l
+
+        bayer = pixels.reshape(height, width).astype(np.float32)
+        bayer = np.clip((bayer - black_level) / (1023.0 - black_level), 0.0, 1.0)
+        return bayer
+
+    @staticmethod
+    def bayer_to_rggb(bayer):
+        """从 Bayer mosaic 提取 GRBG 4 平面
+
+        OV13855 GRBG 排列:
+            行0: Gr R  Gr R ...
+            行1: Gb B  Gb B ...
+
+        参数:
+            bayer: [H, W] float32 Bayer mosaic
+        返回:
+            rggb: [4, H/2, W/2] float32, 顺序为 [R, Gr, Gb, B]
+        """
+        R  = bayer[0::2, 1::2]   # 偶行奇列
+        Gr = bayer[0::2, 0::2]   # 偶行偶列
+        Gb = bayer[1::2, 0::2]   # 奇行偶列
+        B  = bayer[1::2, 1::2]   # 奇行奇列
+        rggb = np.stack([R, Gr, Gb, B], axis=0)  # [4, H/2, W/2]
+        return rggb
+
     def random_crop_start(self, h, w, crop_size, min_divide=2):
         """生成随机裁剪坐标，保持 Bayer 2x2 块对齐"""
         rand_h = random.randint(0, h - crop_size)
@@ -891,50 +972,69 @@ class RAW3RGB_dataset(data.Dataset):
         rand_w = (rand_w // min_divide) * min_divide
         return rand_h, rand_w
 
+    def _load_raw_frame(self, raw_path):
+        """加载一帧 SGRBG10P RAW → [4, H/2, W/2] RGGB"""
+        raw_bytes = np.fromfile(raw_path, dtype=np.uint8)
+        bayer = self.unpack_sgrbg10p(raw_bytes, self.raw_width, self.raw_height,
+                                     black_level=self.black_level)
+        rggb = self.bayer_to_rggb(bayer)  # [4, H/2, W/2]
+        return rggb
+
     def __getitem__(self, index):
         if self.use_random:
-            # 占位模式：返回随机数据，用于冒烟测试
-            h, w = self.crop_size, self.crop_size
-            short1 = torch.randn(4, h, w)
-            long = torch.randn(4, h, w)
-            short2 = torch.randn(4, h, w)
-            gt = torch.randn(3, h, w)
+            # 占位模式：返回随机数据（numpy，与真实路径一致）
+            cs = self.crop_size
+            short1 = np.random.randn(4, cs, cs).astype(np.float32)
+            long = np.random.randn(4, cs, cs).astype(np.float32)
+            short2 = np.random.randn(4, cs, cs).astype(np.float32)
+            gt = np.random.randn(3, cs * 2, cs * 2).astype(np.float32)
         else:
-            # TODO: 实际数据加载逻辑
-            # 1. 读取 3 帧 RAW 文件（10-bit Bayer packed → 4ch RGGB）
-            #    raw_data = np.fromfile(raw_path, dtype=np.uint16)
-            #    raw_data = raw_data.reshape(H, W)
-            #    R  = raw_data[0::2, 0::2].astype(np.float32) / 1023.0
-            #    Gr = raw_data[0::2, 1::2].astype(np.float32) / 1023.0
-            #    Gb = raw_data[1::2, 0::2].astype(np.float32) / 1023.0
-            #    B  = raw_data[1::2, 1::2].astype(np.float32) / 1023.0
-            #    rggb = np.stack([R, Gr, Gb, B], axis=0)  # [4, H/2, W/2]
-            #
-            # 2. 读取 RGB GT（PNG）
-            #    gt = cv2.imread(gt_path)
-            #    gt = cv2.cvtColor(gt, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
-            #    gt = gt.transpose(2, 0, 1)  # [3, H, W]
-            #
-            # 3. 随机裁剪（坐标保持偶对齐）
-            #    rand_h, rand_w = self.random_crop_start(H, W, crop_size, min_divide=2)
-            #    # 裁剪 RGGB（分辨率是 RGB 的一半）
-            #    rh, rw = rand_h // 2, rand_w // 2
-            #    cs = crop_size // 2
-            #    short1 = short1[:, rh:rh+cs, rw:rw+cs]
-            #
-            # sample = {
-            #     'short1_raw': short1,   # [4, H, W]
-            #     'long_raw':   long,     # [4, H, W]
-            #     'short2_raw': short2,   # [4, H, W]
-            #     'RGBout_img': gt,       # [3, H, W]
-            # }
-            raise NotImplementedError('Real data loading not implemented yet. Set use_random=True for testing.')
+            scene_path = self.file_list[index]
 
+            # 1. 加载 3 帧 RAW
+            short1 = self._load_raw_frame(os.path.join(scene_path, 'short1.raw'))
+            long = self._load_raw_frame(os.path.join(scene_path, 'long.raw'))
+            short2 = self._load_raw_frame(os.path.join(scene_path, 'short2.raw'))
+
+            # 2. 加载 GT（sRGB），resize 到 RAW RGGB 平面 2 倍分辨率（全分辨率）
+            gt = cv2.imread(os.path.join(scene_path, 'gt.png'))
+            gt = cv2.cvtColor(gt, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+            H, W = short1.shape[1], short1.shape[2]  # RAW RGGB 平面尺寸
+            gt = cv2.resize(gt, (W * 2, H * 2), interpolation=cv2.INTER_AREA)
+            gt = gt.transpose(2, 0, 1)  # [3, 2H, 2W]
+
+            # 3. 随机裁剪（RAW 在 RGGB 平面裁剪，GT 在 2x 坐标裁剪）
+            if self.random_crop:
+                rh, rw = self.random_crop_start(H, W, self.crop_size, min_divide=1)
+                short1 = short1[:, rh:rh+self.crop_size, rw:rw+self.crop_size]
+                long = long[:, rh:rh+self.crop_size, rw:rw+self.crop_size]
+                short2 = short2[:, rh:rh+self.crop_size, rw:rw+self.crop_size]
+                # GT 裁剪坐标和尺寸是 RAW 的 2 倍
+                gt_rh, gt_rw = rh * 2, rw * 2
+                gt_crop = self.crop_size * 2
+                gt = gt[:, gt_rh:gt_rh+gt_crop, gt_rw:gt_rw+gt_crop]
+
+            # 4. 随机翻转增强（对所有帧一致）
+            if self.tag == 'train':
+                if random.random() > 0.5:
+                    short1 = short1[:, :, ::-1].copy()
+                    long = long[:, :, ::-1].copy()
+                    short2 = short2[:, :, ::-1].copy()
+                    gt = gt[:, :, ::-1].copy()
+                if random.random() > 0.5:
+                    short1 = short1[:, ::-1, :].copy()
+                    long = long[:, ::-1, :].copy()
+                    short2 = short2[:, ::-1, :].copy()
+                    gt = gt[:, ::-1, :].copy()
+
+        # 与 trainer 兼容的 key 命名
+        # short_img: 两短帧拼接 [8, crop_size, crop_size]，由 trainer 拆分给 D2HNet_RK
+        short_cat = np.concatenate([short1, short2], axis=0)  # [8, H, W]
         sample = {
-            'short1_raw': short1,   # [4, H, W]
-            'long_raw':   long,     # [4, H, W]
-            'short2_raw': short2,   # [4, H, W]
-            'RGBout_img': gt,       # [3, H, W]
+            'short_img':  torch.from_numpy(short_cat).float(),  # [8, crop_size, crop_size]
+            'long_img':   torch.from_numpy(np.asarray(long)).float(),     # [4, crop_size, crop_size]
+            'RGBout_img': torch.from_numpy(np.asarray(gt)).float(),       # [3, crop_size, crop_size]
+            'gt_long_img': torch.from_numpy(np.asarray(gt)).float(),      # 与 trainer 兼容
         }
         return sample
 

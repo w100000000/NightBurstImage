@@ -4,7 +4,7 @@ import torch
 import yaml
 from easydict import EasyDict as edict
 
-from trainer import Trainer, TwoPhaseTrainer, UnifiedTrainer, DistillTrainer
+from trainer import Trainer, TwoPhaseTrainer, UnifiedTrainer
 
 
 def attatch_to_config(args, opt):
@@ -26,7 +26,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     with open(args.opt, mode = 'r') as f:
-        opt = edict(yaml.load(f))
+        opt = edict(yaml.load(f, Loader=yaml.FullLoader))
 
     attatch_to_config(args, opt)
 
@@ -34,8 +34,6 @@ if __name__ == "__main__":
     
     if opt.Training_config.phase == 'unified':
         trainer = UnifiedTrainer(opt = opt, num_gpus = opt.num_gpus)
-    elif opt.Training_config.phase == 'distill':
-        trainer = DistillTrainer(opt = opt, num_gpus = opt.num_gpus)
     else:
         trainer = TwoPhaseTrainer(opt = opt, num_gpus = opt.num_gpus)
     trainer.train()

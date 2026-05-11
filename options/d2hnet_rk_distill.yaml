@@ -25,7 +25,7 @@ GNet:
     in_channel: 4                   # RAW RGGB
     out_channel: 3                  # RGB 输出
     ngf: 10                         # 轻量化（~77K 参数）
-    activ: 'lrelu'
+    activ: 'relu'
     norm: 'none'
     pad_type: 'zero'
     final_activ: 'none'
@@ -45,7 +45,7 @@ Teacher:
     in_channel: 4
     out_channel: 3
     ngf: 32                         # 大模型（~1.2M 参数）
-    activ: 'lrelu'
+    activ: 'relu'
     norm: 'none'
     pad_type: 'zero'
     final_activ: 'none'
@@ -80,7 +80,8 @@ Dataset:
   val_path: './data/raw/val'
   input_format: 'raw_rggb'
   gt_format: 'rgb'
+  black_level: 64                  # OV13855 10-bit 黑电平
   noise_aug: False
   random_crop: True
-  crop_size: 256
+  crop_size: 256                   # RAW RGGB 平面裁剪尺寸
   patch_per_image: 4

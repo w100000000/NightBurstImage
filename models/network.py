@@ -682,6 +682,8 @@ class D2HNet_RK(BaseModel):
         # 瓶颈层通道数：ngf*4
         self.enc_ch = [self.ngf, self.ngf * 2, self.ngf * 4]
         self.bottleneck_ch = self.ngf * 4
+        # 最终 PixelShuffle(2) 所需的通道数 = out_channel * 4
+        self.final_ps_ch = self.out_channel * 4  # 12 for RGB output
 
         self.build_layers()
 
@@ -758,46 +760,50 @@ class D2HNet_RK(BaseModel):
         # ========================
         # 解码器（PixelShuffle 上采样 + skip 连接）
         # ========================
-        # 注意：PixelShuffle(2) 要求输入通道数是 4 的倍数
+        # PixelShuffle(2) 将通道数除以 4，分辨率 x2
         # 解码器每级：PixelShuffle 上采样 → skip 拼接 → 通道压缩 → 残差块
 
-        # Level 2 解码：[B,40,135,240] → [B,10,270,480]
-        # cat(short_skip2, long_skip2) → [B,10+40+40=90,270,480] → 压缩到 20
-        self.dec2_up = nn.PixelShuffle(upscale_factor=2)  # 40 → 10
+        # 计算各级 PixelShuffle 后的通道数
+        dec2_up_ch = self.bottleneck_ch // 4       # 40 // 4 = 10
+        dec1_up_ch = self.enc_ch[1] // 4           # 20 // 4 = 5
+        dec0_up_ch = self.final_ps_ch // 4         # 12 // 4 = 3
+
+        # Level 2 解码：1/8 → 1/4 分辨率
+        self.dec2_up = nn.PixelShuffle(upscale_factor=2)
         self.dec2_compress = Conv2dLayer(
-            10 + self.enc_ch[2] * 2, self.enc_ch[1], 3, stride=1, padding=1,
+            dec2_up_ch + self.enc_ch[2] * 2, self.enc_ch[1], 3, stride=1, padding=1,
             pad_type=self.pad_type, activation=self.activ, norm=self.norm)
         self.dec2_res = self._make_resblocks(self.enc_ch[1], self.res_num)
 
-        # Level 1 解码：[B,20,270,480] → [B,5,540,960]
-        # cat(short_skip1, long_skip1) → [B,5+20+20=45,540,960] → 压缩到 12
-        # 注意：输出 12 通道是为了下一级 PixelShuffle 的通道对齐（12/4=3）
-        self.dec1_up = nn.PixelShuffle(upscale_factor=2)  # 20 → 5
+        # Level 1 解码：1/4 → 1/2 分辨率
+        self.dec1_up = nn.PixelShuffle(upscale_factor=2)
         self.dec1_compress = Conv2dLayer(
-            5 + self.enc_ch[1] * 2, 12, 3, stride=1, padding=1,
+            dec1_up_ch + self.enc_ch[1] * 2, self.final_ps_ch, 3, stride=1, padding=1,
             pad_type=self.pad_type, activation=self.activ, norm=self.norm)
-        self.dec1_res = self._make_resblocks(12, self.res_num)
+        self.dec1_res = self._make_resblocks(self.final_ps_ch, self.res_num)
 
-        # Level 0 解码：[B,12,540,960] → [B,3,1080,1920]
-        # cat(short_skip0, long_skip0) → [B,3+10+10=23,1080,1920] → 压缩到 10
-        self.dec0_up = nn.PixelShuffle(upscale_factor=2)  # 12 → 3
+        # Level 0 解码：1/2 → 1x 分辨率（RGGB 平面分辨率）
+        self.dec0_up = nn.PixelShuffle(upscale_factor=2)
         self.dec0_compress = Conv2dLayer(
-            3 + self.enc_ch[0] * 2, self.ngf, 3, stride=1, padding=1,
+            dec0_up_ch + self.enc_ch[0] * 2, self.ngf, 3, stride=1, padding=1,
             pad_type=self.pad_type, activation=self.activ, norm=self.norm)
         self.dec0_res = self._make_resblocks(self.ngf, self.res_num)
 
         # ========================
-        # 输出层
+        # 输出层（2x 上采样到全分辨率 RGB）
         # ========================
-        # ref_conv：将长曝光 RAW（4ch）转为 RGB 参考图（3ch），作为残差学习的基准
-        self.ref_conv = Conv2dLayer(
-            self.in_channel, self.out_channel, 1, stride=1, padding=0,
-            pad_type=self.pad_type, activation='none', norm='none')
-
-        # residual_conv：将解码器输出（ngf 通道）映射为 3 通道残差修正量
+        # residual_conv：ngf → final_ps_ch(12) 通道，准备 PixelShuffle(2) 输出
         self.residual_conv = Conv2dLayer(
-            self.ngf, self.out_channel, 3, stride=1, padding=1,
+            self.ngf, self.final_ps_ch, 3, stride=1, padding=1,
             pad_type=self.pad_type, activation='none', norm='none')
+        # PixelShuffle(2)：12ch @ 1x → 3ch @ 2x（demosaic 2x 上采样）
+        self.final_up = nn.PixelShuffle(upscale_factor=2)
+
+        # ref_conv：长曝光 RAW(4ch) → final_ps_ch(12) 通道 + PixelShuffle → 3ch @ 2x
+        self.ref_conv = Conv2dLayer(
+            self.in_channel, self.final_ps_ch, 1, stride=1, padding=0,
+            pad_type=self.pad_type, activation='none', norm='none')
+        self.ref_up = nn.PixelShuffle(upscale_factor=2)
 
         # 最终激活函数
         if self.final_activ == 'tanh':
@@ -817,20 +823,16 @@ class D2HNet_RK(BaseModel):
             x = block(x)
         return x
 
-    def forward(self, short1_raw, long_raw, short2_raw):
+    def forward(self, short_cat, long_raw):
         """
         前向传播
 
         参数:
-            short1_raw -- 短曝光帧1（头帧） [B, 4, H, W]（RGGB RAW）
+            short_cat  -- 两短帧拼接       [B, 8, H, W]（RGGB RAW, short1+short2）
             long_raw   -- 长曝光帧          [B, 4, H, W]（RGGB RAW）
-            short2_raw -- 短曝光帧2（尾帧） [B, 4, H, W]（RGGB RAW）
         返回:
             output     -- 复原的 RGB 图像    [B, 3, H, W]
         """
-
-        # Step 1: 拼接两个短曝光帧
-        short_cat = torch.cat([short1_raw, short2_raw], dim=1)  # [B, 8, H, W]
 
         # Step 2: 短帧编码器（提取多尺度特征，保存 skip 连接）
         short_e0 = self.short_enc0_conv(short_cat)                    # [B, 10, H, W]
@@ -883,10 +885,12 @@ class D2HNet_RK(BaseModel):
         dec = self.dec0_compress(dec)                                  # [B, 10, H, W]
         dec = self._apply_resblocks(dec, self.dec0_res)
 
-        # Step 6: 残差学习输出
-        residual = self.residual_conv(dec)                             # [B, 3, H, W]
-        ref = self.ref_conv(long_raw)                                  # [B, 3, H, W]
-        output = ref + residual
+        # Step 6: 2x 上采样残差学习输出（demosaic）
+        residual = self.residual_conv(dec)                             # [B, 12, H, W]
+        residual = self.final_up(residual)                             # [B, 3, 2H, 2W]
+        ref = self.ref_conv(long_raw)                                  # [B, 12, H, W]
+        ref = self.ref_up(ref)                                         # [B, 3, 2H, 2W]
+        output = ref + residual                                        # [B, 3, 2H, 2W]
 
         if self.final_activ == 'tanh':
             output = self.final_activation(output)
@@ -941,14 +945,14 @@ if __name__ == "__main__":
     print(out.shape)
 
     # ========================
-    # 测试 D2HNet_RK（轻量化网络）
+    # 测试 D2HNet_RK（轻量化网络，2x 输出）
     # ========================
     print("\n--- 测试 D2HNet_RK ---")
     opt_rk = argparse.Namespace(
         in_channel=4,         # RAW RGGB 4 通道
         out_channel=3,        # RGB 输出
         ngf=10,               # 基础通道数
-        activ='lrelu',
+        activ='relu',         # ReLU（INT8 量化友好）
         norm='none',
         pad_type='zero',
         final_activ='none',
@@ -957,10 +961,20 @@ if __name__ == "__main__":
     )
 
     net_rk = D2HNet_RK(opt_rk)
-    # 测试输入：3 帧 RAW（短-长-短），256×256
-    raw_input = torch.randn(1, 4, 256, 256)
-    out_rk = net_rk(raw_input, raw_input, raw_input)
-    print("D2HNet_RK 输出维度:", out_rk.shape)  # 期望: [1, 3, 256, 256]
+    # 测试输入：短帧拼接 [B,8,H,W] + 长帧 [B,4,H,W]
+    # 输入 RGGB 平面 256x256 → 输出 RGB 全分辨率 512x512
+    short_cat = torch.randn(1, 8, 256, 256)
+    long_raw = torch.randn(1, 4, 256, 256)
+    out_rk = net_rk(short_cat, long_raw)
+    print("D2HNet_RK 输出维度:", out_rk.shape)  # 期望: [1, 3, 512, 512]
+    assert out_rk.shape == (1, 3, 512, 512), "输出维度错误！期望 [1,3,512,512], 实际 %s" % str(out_rk.shape)
+
+    # 测试 1080p 输入（部署配置）
+    short_cat_1080 = torch.randn(1, 8, 540, 960)
+    long_raw_1080 = torch.randn(1, 4, 540, 960)
+    out_1080 = net_rk(short_cat_1080, long_raw_1080)
+    print("D2HNet_RK 1080p 输出维度:", out_1080.shape)  # 期望: [1, 3, 1080, 1920]
+    assert out_1080.shape == (1, 3, 1080, 1920), "1080p 输出维度错误！"
 
     # 统计参数量
     total_params = sum(p.numel() for p in net_rk.parameters())

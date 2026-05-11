@@ -23,10 +23,12 @@ class Conv2dLayer(nn.Module):
         if p > 0:
             if pad_type == 'reflect':
                 self.layers += [nn.ReflectionPad2d(padding)]
+                p = 0
             elif pad_type == 'replicate':
                 self.layers += [nn.ReplicationPad2d(padding)]
+                p = 0
             elif pad_type == 'zero':
-                p = 1
+                pass
             else:
                 raise NotImplementedError('padding type %s is not supported.' % pad_type)
 
@@ -102,7 +104,7 @@ class ResBlock(nn.Module):
     def forward(self, x):
         residual = x
         out = self.conv2d(x)
-        out = 0.1 * out + residual
+        out = out + residual
         return out
 
 
