@@ -844,10 +844,10 @@ class RAW3RGB_dataset(data.Dataset):
     """RAW 域三帧融合数据集
 
     加载 3 帧 RAW（短1-长-短2）+ 1 帧 RGB GT。
-    RAW 格式：V4L2 SGRBG10P（OV13855, 10-bit packed Bayer, GRBG 排列）。
+    RAW 格式：V4L2 SBGGR10P（OV13855, 10-bit packed Bayer, BGGR 排列）。
 
     目录结构:
-        data/raw/train/scene001/short1.raw   # V4L2 SGRBG10P packed
+        data/raw/train/scene001/short1.raw   # V4L2 SBGGR10P packed
         data/raw/train/scene001/long.raw
         data/raw/train/scene001/short2.raw
         data/raw/train/scene001/gt.png       # sRGB GT（全分辨率）
@@ -895,8 +895,8 @@ class RAW3RGB_dataset(data.Dataset):
         print('%s === RAW3RGB_dataset samples: %d' % (tag, len(self.file_list)))
 
     @staticmethod
-    def unpack_sgrbg10p(raw_bytes, width, height, black_level=64):
-        """解包 V4L2 SGRBG10P 格式（OV13855 输出）
+    def unpack_sbggr10p(raw_bytes, width, height, black_level=64):
+        """解包 V4L2 SBGGR10P 格式（OV13855 输出）
 
         10-bit packed: 每 5 字节存 4 个像素。
         存储顺序（小端）:
@@ -946,21 +946,21 @@ class RAW3RGB_dataset(data.Dataset):
 
     @staticmethod
     def bayer_to_rggb(bayer):
-        """从 Bayer mosaic 提取 GRBG 4 平面
+        """从 Bayer mosaic 提取 BGGR 4 平面 → RGGB 通道顺序
 
-        OV13855 GRBG 排列:
-            行0: Gr R  Gr R ...
-            行1: Gb B  Gb B ...
+        OV13855 BGGR 排列:
+            行0: B  Gb B  Gb ...
+            行1: Gr R  Gr R  ...
 
         参数:
             bayer: [H, W] float32 Bayer mosaic
         返回:
             rggb: [4, H/2, W/2] float32, 顺序为 [R, Gr, Gb, B]
         """
-        R  = bayer[0::2, 1::2]   # 偶行奇列
-        Gr = bayer[0::2, 0::2]   # 偶行偶列
-        Gb = bayer[1::2, 0::2]   # 奇行偶列
-        B  = bayer[1::2, 1::2]   # 奇行奇列
+        R  = bayer[1::2, 1::2]   # 奇行奇列
+        Gr = bayer[1::2, 0::2]   # 奇行偶列
+        Gb = bayer[0::2, 1::2]   # 偶行奇列
+        B  = bayer[0::2, 0::2]   # 偶行偶列
         rggb = np.stack([R, Gr, Gb, B], axis=0)  # [4, H/2, W/2]
         return rggb
 
@@ -973,9 +973,9 @@ class RAW3RGB_dataset(data.Dataset):
         return rand_h, rand_w
 
     def _load_raw_frame(self, raw_path):
-        """加载一帧 SGRBG10P RAW → [4, H/2, W/2] RGGB"""
+        """加载一帧 SBGGR10P RAW → [4, H/2, W/2] RGGB"""
         raw_bytes = np.fromfile(raw_path, dtype=np.uint8)
-        bayer = self.unpack_sgrbg10p(raw_bytes, self.raw_width, self.raw_height,
+        bayer = self.unpack_sbggr10p(raw_bytes, self.raw_width, self.raw_height,
                                      black_level=self.black_level)
         rggb = self.bayer_to_rggb(bayer)  # [4, H/2, W/2]
         return rggb
