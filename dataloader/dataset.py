@@ -236,9 +236,9 @@ class SLRGB2RGB_dataset(data.Dataset):
             in_long_blurpatch = cv2.cvtColor(in_long_blurpatch, cv2.COLOR_BGR2RGB)
             out_blur_patch = cv2.cvtColor(out_blur_patch, cv2.COLOR_BGR2RGB)
 
-            in_short_blurpatch = in_short_blurpatch.astype(np.float) / 255.0
-            in_long_blurpatch = in_long_blurpatch.astype(np.float) / 255.0
-            out_blur_patch = out_blur_patch.astype(np.float) / 255.0
+            in_short_blurpatch = in_short_blurpatch.astype(np.float64) / 255.0
+            in_long_blurpatch = in_long_blurpatch.astype(np.float64) / 255.0
+            out_blur_patch = out_blur_patch.astype(np.float64) / 255.0
 
             in_short_blurpatch, in_long_blurpatch, out_blur_patch, gt_long_blurpatch = \
                 self.crop_patch(in_short_blurpatch, in_long_blurpatch, out_blur_patch, patch_per_image = 1, crop_size = crop_size)
@@ -290,9 +290,9 @@ class SLRGB2RGB_dataset(data.Dataset):
                 return None
             
             # Normalization and add noise
-            in_short_img = in_short_img.astype(np.float) / 255.0
-            in_long_img = in_long_img.astype(np.float) / 255.0
-            out_srgb_img = out_srgb_img.astype(np.float) / 255.0
+            in_short_img = in_short_img.astype(np.float64) / 255.0
+            in_long_img = in_long_img.astype(np.float64) / 255.0
+            out_srgb_img = out_srgb_img.astype(np.float64) / 255.0
 
             if hasattr(self.opt, 'color_adjust') and self.opt.color_adjust:
                 in_short_img = DA.color_adjustment(in_short_img, self.opt.color_adjust.prob)
@@ -426,9 +426,9 @@ class SLRGB2RGB_valdataset(data.Dataset):
         out_srgb_img = cv2.imread(out_srgb_path)
         
         # Normalization and add noise
-        in_short_img = in_short_img.astype(np.float) / 255.0
-        in_long_img = in_long_img.astype(np.float) / 255.0
-        out_srgb_img = out_srgb_img.astype(np.float) / 255.0
+        in_short_img = in_short_img.astype(np.float64) / 255.0
+        in_long_img = in_long_img.astype(np.float64) / 255.0
+        out_srgb_img = out_srgb_img.astype(np.float64) / 255.0
 
         if self.opt.shot_noise:
             in_short_img = DA.add_shot_noise(in_short_img, iso = self.opt.shot_short_iso, noise = self.opt.shot_noise_mode)
@@ -524,8 +524,8 @@ class SLRGB2RGB_valdataset_singleimage(data.Dataset):
         in_long_img = cv2.cvtColor(in_long_img, cv2.COLOR_BGR2RGB)
         
         # Normalization
-        in_short_img = in_short_img.astype(np.float) / 255.0
-        in_long_img = in_long_img.astype(np.float) / 255.0
+        in_short_img = in_short_img.astype(np.float64) / 255.0
+        in_long_img = in_long_img.astype(np.float64) / 255.0
 
         # to tensor
         in_short_img = torch.from_numpy(in_short_img).float().permute(2, 0, 1).contiguous()
@@ -631,9 +631,9 @@ class TP_dataset(SLRGB2RGB_dataset):
         out_srgb_img = read_img(self.opt, out_srgb_path)
 
         # Normalization and add noise
-        in_short_img = in_short_img.astype(np.float) / 255.0
-        in_long_img = in_long_img.astype(np.float) / 255.0
-        out_srgb_img = out_srgb_img.astype(np.float) / 255.0
+        in_short_img = in_short_img.astype(np.float64) / 255.0
+        in_long_img = in_long_img.astype(np.float64) / 255.0
+        out_srgb_img = out_srgb_img.astype(np.float64) / 255.0
 
         if hasattr(self.opt, 'color_adjust') and self.opt.color_adjust:
             in_short_img = DA.color_adjustment(in_short_img, self.opt.color_adjust.prob)
@@ -739,10 +739,10 @@ class TP_dataset_v1(TP_dataset):
         if isinstance(tensors, list):
             ret_tensors = [[] for _ in range(len(tensors))]
             for i in range(len(tensors)):
-                ret_tensors[i] = F.upsample(tensors[i], size = (deblur_size, deblur_size), mode = 'area')
+                ret_tensors[i] = F.interpolate(tensors[i], size = (deblur_size, deblur_size), mode = 'area')
             return tuple(ret_tensors)
         else:
-            ret_tensor = F.upsample(tensors, size = (deblur_size, deblur_size), mode = 'area')
+            ret_tensor = F.interpolate(tensors, size = (deblur_size, deblur_size), mode = 'area')
             return ret_tensor
             
 
@@ -768,9 +768,9 @@ class TP_dataset_v1(TP_dataset):
         out_srgb_img = read_img(self.opt, out_srgb_path)
 
         # Normalization and add noise
-        in_short_img = in_short_img.astype(np.float) / 255.0
-        in_long_img = in_long_img.astype(np.float) / 255.0
-        out_srgb_img = out_srgb_img.astype(np.float) / 255.0
+        in_short_img = in_short_img.astype(np.float64) / 255.0
+        in_long_img = in_long_img.astype(np.float64) / 255.0
+        out_srgb_img = out_srgb_img.astype(np.float64) / 255.0
         
         if hasattr(self.opt, 'color_adjust') and self.opt.color_adjust:
             in_short_img = DA.color_adjustment(in_short_img, self.opt.color_adjust.prob)
@@ -1061,15 +1061,15 @@ class TP_valdataset_singleimage(SLRGB2RGB_valdataset_singleimage):
         down_short_img = cv2.resize(in_short_img, (1024, 1024), interpolation = cv2.INTER_AREA)
         down_long_img = cv2.resize(in_long_img, (1024, 1024), interpolation = cv2.INTER_AREA)
 
-        down_short_img = down_short_img.astype(np.float) / 255.
-        down_long_img = down_long_img.astype(np.float) / 255.
+        down_short_img = down_short_img.astype(np.float64) / 255.
+        down_long_img = down_long_img.astype(np.float64) / 255.
 
         down_short_img = torch.from_numpy(down_short_img).float().permute(2, 0, 1)
         down_long_img = torch.from_numpy(down_long_img).float().permute(2, 0, 1)
         
         # Normalization and add noise
-        in_short_img = in_short_img.astype(np.float) / 255.0
-        in_long_img = in_long_img.astype(np.float) / 255.0
+        in_short_img = in_short_img.astype(np.float64) / 255.0
+        in_long_img = in_long_img.astype(np.float64) / 255.0
 
         # to tensor
         in_short_img = torch.from_numpy(in_short_img).float().permute(2, 0, 1).contiguous()

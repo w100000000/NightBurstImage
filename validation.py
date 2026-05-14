@@ -55,11 +55,11 @@ class ValDataset(Dataset):
         down_short_img = cv2.resize(short_img, (short_img.shape[1] // 2, short_img.shape[0] // 2), \
             interpolation = cv2.INTER_AREA)
 
-        long_img = long_img.astype(np.float) / 255.
-        short_img = short_img.astype(np.float) / 255.
-        RGBout_img = RGBout_img.astype(np.float) / 255.
-        down_long_img = down_long_img.astype(np.float) / 255.
-        down_short_img = down_short_img.astype(np.float) / 255.
+        long_img = long_img.astype(np.float64) / 255.
+        short_img = short_img.astype(np.float64) / 255.
+        RGBout_img = RGBout_img.astype(np.float64) / 255.
+        down_long_img = down_long_img.astype(np.float64) / 255.
+        down_short_img = down_short_img.astype(np.float64) / 255.
 
         long_img = torch.from_numpy(long_img).float().permute(2, 0, 1)
         short_img = torch.from_numpy(short_img).float().permute(2, 0, 1)
@@ -86,7 +86,7 @@ def TwoPhase_Val(args):
         utils.check_path(os.path.join(args.save_path, 'night'))
 
     with open(args.opt, mode = 'r') as f:
-        opt = edict(yaml.load(f))
+        opt = edict(yaml.load(f, Loader=yaml.FullLoader))
 
     # ----------------------------------------
     #                   Test

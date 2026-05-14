@@ -20,7 +20,7 @@ def OnePhase_Test(args):
         os.makedirs(args.save_path)
 
     with open(args.opt, mode = 'r') as f:
-        opt = edict(yaml.load(f))
+        opt = edict(yaml.load(f, Loader=yaml.FullLoader))
 
     generator = create_generator_val(opt.GNet, args.model_path, force_load = True)
 
@@ -106,7 +106,7 @@ def TwoPhase_Test(args):
         os.makedirs(args.save_path)
 
     with open(args.opt, mode = 'r') as f:
-        opt = edict(yaml.load(f))
+        opt = edict(yaml.load(f, Loader=yaml.FullLoader))
 
     if opt.Training_config.phase == 'deblur':
         deblurNet = create_generator_val(opt.DeblurNet, args.model_path, force_load = False)

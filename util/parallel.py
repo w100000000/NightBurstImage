@@ -13,7 +13,7 @@ class Parallel(object):
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             # device = torch.device("cpu")
             # cudnn open
-            torch.backends.cudnn.enabled = False
+            torch.backends.cudnn.enabled = True
 
         self.device = device
         self.num_gpus = num_gpus

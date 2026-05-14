@@ -25,50 +25,65 @@ import numpy as np
 
 
 def collect_calibration_data(calib_dir, max_samples=200, height=540, width=960):
-    """收集校准数据
+    """收集校准数据并保存为 npy 文件，生成 RKNN 所需的校准数据列表文件。
 
-    扫描目录下的 .npy 文件（RAW 4ch float32），用于 INT8 量化校准。
-    返回双输入格式: [(short_cat, long_raw), ...] 用于多输入模型。
+    RKNN-Toolkit2 的 build(dataset=...) 要求传入一个文本文件路径，
+    文本文件每行列出一个校准样本的文件路径。对于多输入模型，每行用空格
+    分隔各输入的文件路径。
 
     参数:
-        calib_dir: 校准数据目录，包含 .npy 文件
+        calib_dir: 校准数据目录，包含 .npy 或 .raw 文件
         max_samples: 最大样本数
         height: RAW RGGB 平面高度
         width: RAW RGGB 平面宽度
     返回:
-        list of tuples, each (short_cat[8,H,W], long_raw[4,H,W])
+        str: 校准数据列表文件的路径
     """
+    calib_output_dir = os.path.join(os.path.dirname(calib_dir), 'calib_npy')
+    os.makedirs(calib_output_dir, exist_ok=True)
+
     npy_files = sorted(glob.glob(os.path.join(calib_dir, '*.npy')))
     if len(npy_files) == 0:
-        # 如果没有 .npy 文件，尝试从 .raw 文件读取
         raw_files = sorted(glob.glob(os.path.join(calib_dir, '**/*.raw'), recursive=True))
         if len(raw_files) == 0:
             print('WARNING: No calibration data found in %s' % calib_dir)
             print('Generating random calibration data for testing...')
-            data_list = []
-            for _ in range(max_samples):
-                short_cat = np.random.rand(1, 8, height, width).astype(np.float32)
-                long_raw = np.random.rand(1, 4, height, width).astype(np.float32)
-                data_list.append({'short_cat': short_cat, 'long_raw': long_raw})
-            return data_list
-        npy_files = raw_files[:max_samples]
+            raw_files = []
+            for i in range(min(max_samples, 100)):
+                data = np.random.rand(4, height, width).astype(np.float32)
+                path = os.path.join(calib_output_dir, 'random_%04d.npy' % i)
+                np.save(path, data)
+                raw_files.append(path)
+            npy_files = raw_files
+        else:
+            npy_files = raw_files[:max_samples]
 
-    data_list = []
-    for f in npy_files[:max_samples]:
+    # 生成校准样本 npy 文件（双输入: short_cat + long_raw）
+    dataset_lines = []
+    for idx, f in enumerate(npy_files[:max_samples]):
         if f.endswith('.npy'):
             data = np.load(f)
         else:
             data = np.fromfile(f, dtype=np.float32).reshape(4, height, width)
         if data.ndim == 4:
             data = data[0]  # [4, H, W]
-        # 构造双输入校准样本
-        short_cat = np.concatenate([data, data], axis=0)[np.newaxis]  # [1, 8, H, W]
-        long_raw = data[np.newaxis]  # [1, 4, H, W]
-        data_list.append({'short_cat': short_cat.astype(np.float32),
-                          'long_raw': long_raw.astype(np.float32)})
 
-    print('Collected %d calibration samples from %s' % (len(data_list), calib_dir))
-    return data_list
+        short_cat = np.concatenate([data, data], axis=0)  # [8, H, W]
+        long_raw = data  # [4, H, W]
+
+        short_path = os.path.join(calib_output_dir, 'short_%04d.npy' % idx)
+        long_path = os.path.join(calib_output_dir, 'long_%04d.npy' % idx)
+        np.save(short_path, short_cat)
+        np.save(long_path, long_raw)
+        dataset_lines.append('%s %s' % (short_path, long_path))
+
+    # 写入校准列表文件
+    dataset_txt = os.path.join(calib_output_dir, 'dataset.txt')
+    with open(dataset_txt, 'w') as f:
+        f.write('\n'.join(dataset_lines))
+
+    print('Collected %d calibration samples, list saved to %s' % (len(dataset_lines), dataset_txt))
+    return dataset_txt
 
 
 def convert_onnx_to_rknn(onnx_path, output_path, calib_dir, target='rk3588',
@@ -117,13 +132,13 @@ def convert_onnx_to_rknn(onnx_path, output_path, calib_dir, target='rk3588',
     # 3. 构建 RKNN（含量化）
     # ========================
     print('Building RKNN model...')
-    calib_data = None
+    dataset_txt = None
     if do_quantize:
-        calib_data = collect_calibration_data(calib_dir, height=height, width=width)
+        dataset_txt = collect_calibration_data(calib_dir, height=height, width=width)
 
     ret = rknn.build(
         do_quantization=do_quantize,
-        dataset=calib_data if calib_data else None,
+        dataset=dataset_txt,
     )
     if ret != 0:
         print('Build RKNN failed!')

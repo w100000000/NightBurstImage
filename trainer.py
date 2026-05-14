@@ -360,7 +360,7 @@ class TwoPhaseTrainer(TrainingModule):
                     outs = self.G(down_short_img, down_long_img)
                 elif self.Training_config.phase == 'denoise':
                     deblur_out = self.deblurNet(down_short_img, down_long_img).detach()
-                    deblur_out = F.upsample(deblur_out, size = (short_img.shape[2], short_img.shape[3]), mode = 'bilinear', align_corners = False)
+                    deblur_out = F.interpolate(deblur_out, size = (short_img.shape[2], short_img.shape[3]), mode = 'bilinear', align_corners = False)
 
                     short_img, long_img, RGBout_img, deblur_out = \
                         self.train_loader.dataset.crop_tensor_patch([short_img, long_img, RGBout_img, deblur_out])
@@ -448,7 +448,7 @@ class TwoPhaseTrainer(TrainingModule):
                     outs = self.G(down_short_img, down_long_img)
                 elif self.Training_config.phase == 'denoise':
                     deblur_out = self.deblurNet(down_short_img, down_long_img).detach()
-                    deblur_out = F.upsample(deblur_out, size = (H, W), mode = 'bilinear', align_corners = False)
+                    deblur_out = F.interpolate(deblur_out, size = (H, W), mode = 'bilinear', align_corners = False)
                     deblur_out = deblur_out.clamp(0.0, 1.0)
                     short_img, long_img, RGBout_img, deblur_out = \
                         self.train_loader.dataset.crop_tensor_patch([short_img, long_img, RGBout_img, deblur_out])

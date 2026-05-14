@@ -129,7 +129,7 @@ class DistillLossBase(nn.Module):
         """
         super(DistillLossBase, self).__init__()
         with open(big_model_config, 'r') as f:
-            config = edict(yaml.load(f))
+            config = edict(yaml.load(f, Loader=yaml.FullLoader))
         self.bigModel = create_generator_val(config.GNet, big_model_path)
 
 
