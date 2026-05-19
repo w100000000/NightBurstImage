@@ -16,7 +16,7 @@ Training_config:
 # Student 网络（部署到 RK3588）
 # ========================
 GNet:
-  name: 'D2HNet_RK'
+  name: 'NBINet'
   init_type: 'kaiming'
   init_gain: 0.02
   finetune_path: ''
@@ -36,10 +36,10 @@ GNet:
 # Teacher 网络（冻结，仅提供蒸馏信号）
 # ========================
 Teacher:
-  name: 'D2HNet_RK'
+  name: 'NBINet'
   init_type: 'kaiming'
   init_gain: 0.02
-  finetune_path: 'snapshot/d2hnet_rk_teacher/GNet/GNet-epoch-199.pkl'
+  finetune_path: 'snapshot/nbinet_teacher/GNet/GNet-epoch-199.pkl'
   force_load: False
   args:
     in_channel: 4

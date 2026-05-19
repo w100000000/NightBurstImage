@@ -1031,9 +1031,9 @@ static const struct regval ov13855_1920x1080_regs[] = {
 	{0x3809, 0x80},  //output_width为0x0780
 	{0x380a, 0x04},  
 	{0x380b, 0x38},  //output_height为0x0438
-	//HTS = 1122（参考ov13855_1920x1080_regs[]设置）
-	{0x380c, 0x04},  
-	{0x380d, 0x62}, 
+	//HTS = 2048 
+	{0x380c, 0x08},  
+	{0x380d, 0x00}, 
 	//VTS = 1200 
 	{0x380e, 0x04},  
 	{0x380f, 0xb0},  
@@ -1162,7 +1162,7 @@ static const struct ov13855_mode supported_modes[] = {
 			.denominator = 600000, 
 		},
 		.exp_def = 0x04ac,  //VTS - 4 = 1196 
-		.hts_def = 0x0462,  //1122 
+		.hts_def = 0x0800,  //2400
 		.vts_def = 0x04b0,  //1200 
 		.bpp = 10,
 		.reg_list = ov13855_1920x1080_regs,

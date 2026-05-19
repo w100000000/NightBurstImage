@@ -1,10 +1,10 @@
 """
-D2HNet_RK ONNX → RKNN 转换脚本
+NBINet ONNX → RKNN 转换脚本
 
 用法:
     python export/convert_to_rknn.py \
-        --onnx_path export/d2hnet_rk.onnx \
-        --output_path export/d2hnet_rk.rknn \
+        --onnx_path export/nbinet.onnx \
+        --output_path export/nbinet.rknn \
         --calib_dir data/raw/val \
         --target rk3588
 
@@ -172,7 +172,7 @@ def convert_onnx_to_rknn(onnx_path, output_path, calib_dir, target='rk3588',
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--onnx_path', type=str, required=True, help='ONNX model path')
-    parser.add_argument('--output_path', type=str, default='export/d2hnet_rk.rknn', help='RKNN output path')
+    parser.add_argument('--output_path', type=str, default='export/nbinet.rknn', help='RKNN output path')
     parser.add_argument('--calib_dir', type=str, default='data/raw/val', help='Calibration data directory')
     parser.add_argument('--target', type=str, default='rk3588', help='Target platform')
     parser.add_argument('--no_quantize', action='store_true', help='Skip INT8 quantization (use FP16)')

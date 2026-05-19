@@ -13,7 +13,7 @@ Training_config:
   show_img_iter: 2000
 
 GNet:
-  name: 'D2HNet_RK'
+  name: 'NBINet'
   init_type: 'kaiming'
   init_gain: 0.02
   finetune_path: ''
