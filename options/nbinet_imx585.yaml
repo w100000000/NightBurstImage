@@ -1,0 +1,65 @@
+# ============================================================
+# NBINet 训练配置 — IMX585 (ZWO ASI585MC) 数据集
+# 4216 组 S1/L/S2 三帧 RAW, 12-bit RGGB Bayer
+# 用于预训练, 后续转到 OV13855 微调
+# ============================================================
+
+save_mode: epoch
+save_by_epoch: 1
+cudnn_benchmark: True
+
+Training_config:
+  phase: unified                    # 单阶段训练
+  epochs: 200
+  train_batch_size: 8               # 服务器 GPU 显存大, batch 可以开大
+  val_batch_size: 1
+  num_workers: 8
+  start_idx: 0
+  show_loss_iter: 100
+  show_img_iter: 2000
+
+GNet:
+  name: 'NBINet'
+  init_type: 'kaiming'
+  init_gain: 0.02
+  finetune_path: ''
+  force_load: False
+  args:
+    in_channel: 4
+    out_channel: 3
+    ngf: 10
+    activ: 'relu'
+    norm: 'none'
+    pad_type: 'zero'
+    final_activ: 'none'
+    res_num: 2
+    bottleneck_res_num: 4
+
+Loss:
+  L1Loss:
+    weight: 100.0
+    mode: 'l1'
+
+Optimizer:
+  name: 'Adam'
+  args:
+    lr_g: 0.0002
+    b1: 0.5
+    b2: 0.999
+    weight_decay: 0.0
+  lr_decrease_mode: 'epoch'
+  lr_decrease_epoch: 80
+  lr_decrease_factor: 0.5
+
+Dataset:
+  dataset_type: 'imx585'            # 'imx585' | 'ov13855'
+  root_path: './dataset'            # IMX585 数据集根目录
+  input_format: 'raw_rggb'
+  gt_format: 'rgb'
+  max_val: 4095                     # 12-bit 白电平
+  black_level: 96                   # IMX585 暗电平 (p01 估计)
+  bayer_pattern: 'RGGB'             # IMX585 原生 Bayer
+  noise_aug: False
+  random_crop: True
+  crop_size: 320                    # 4K 数据裁切空间大, 可以用更大 patch
+  patch_per_image: 4

@@ -46,6 +46,7 @@ Optimizer:
   lr_decrease_factor: 0.5
 
 Dataset:
+  dataset_type: 'ov13855'           # 'imx585' | 'ov13855'
   train_path: './data/raw/train'
   val_path: './data/raw/val'
   input_format: 'raw_rggb'         # 输入格式：4 通道 RGGB

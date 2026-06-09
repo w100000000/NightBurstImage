@@ -33,8 +33,14 @@ class UnifiedTrainer(TrainingModule):
         self._init_optim()
 
     def _init_dataloader(self):
-        train_dataset = dataset.RAW3RGB_dataset(self.opt.Dataset, 'train')
-        val_dataset = dataset.RAW3RGB_dataset(self.opt.Dataset, 'val')
+        dataset_type = getattr(self.opt.Dataset, 'dataset_type', 'ov13855')
+        if dataset_type == 'imx585':
+            from dataloader import dataset_imx585
+            train_dataset = dataset_imx585.IMX585_RAW3RGB_dataset(self.opt.Dataset, 'train')
+            val_dataset = dataset_imx585.IMX585_RAW3RGB_dataset(self.opt.Dataset, 'val')
+        else:
+            train_dataset = dataset.RAW3RGB_dataset(self.opt.Dataset, 'train')
+            val_dataset = dataset.RAW3RGB_dataset(self.opt.Dataset, 'val')
         print('The overall number of training images:', len(train_dataset))
         print('The overall number of validation images:', len(val_dataset))
 

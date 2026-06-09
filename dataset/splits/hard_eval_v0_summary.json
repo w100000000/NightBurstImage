@@ -1,0 +1,17 @@
+{
+  "created_at": "2026-06-05T16:14:36",
+  "dataset_root": "/home/dc2026_2/dataset/raw_d2hnet_asi585mc",
+  "group_counts": {
+    "New_York_City_Walking_Tour_Part_1_Midtown_Manhatta_fps60_clip017": 51,
+    "Prague_Czech_Republic_Walking_Tour_Part_2_Little_Q_fps60_clip013": 32,
+    "Seattle_Washington_Walking_Tour_4k_Ultra_HD_60fps__fps60_clip014": 69,
+    "Seattle_Washington_Walking_Tour_4k_Ultra_HD_60fps__fps60_clip045": 47,
+    "Venice_Beach_to_Santa_Monica_Pier_Walking_Tour_Los_fps60_clip000": 8
+  },
+  "index_path": "/home/dc2026_2/dataset/raw_d2hnet_asi585mc/dataset_index.jsonl",
+  "missing_groups": [],
+  "note": "Generated hard_eval list only; canonical train/val/test split files are unchanged.",
+  "output_split": "/home/dc2026_2/dataset/raw_d2hnet_asi585mc/splits/hard_eval_v0.txt",
+  "selected_sample_count": 207,
+  "test_split": "/home/dc2026_2/dataset/raw_d2hnet_asi585mc/splits/test.txt"
+}

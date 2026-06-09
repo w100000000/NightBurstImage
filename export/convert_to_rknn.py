@@ -31,8 +31,12 @@ def collect_calibration_data(calib_dir, max_samples=200, height=540, width=960):
     文本文件每行列出一个校准样本的文件路径。对于多输入模型，每行用空格
     分隔各输入的文件路径。
 
+    支持两种格式:
+      1. IMX585 场景目录 (推荐): calib_dir 下有 scene_xxx/S1.npy + scene_xxx/L.npy
+      2. 单个 .npy 文件: 对每个文件自动生成 S2=S1+noise 的模拟配对
+
     参数:
-        calib_dir: 校准数据目录，包含 .npy 或 .raw 文件
+        calib_dir: 校准数据目录
         max_samples: 最大样本数
         height: RAW RGGB 平面高度
         width: RAW RGGB 平面宽度
@@ -42,40 +46,89 @@ def collect_calibration_data(calib_dir, max_samples=200, height=540, width=960):
     calib_output_dir = os.path.join(os.path.dirname(calib_dir), 'calib_npy')
     os.makedirs(calib_output_dir, exist_ok=True)
 
-    npy_files = sorted(glob.glob(os.path.join(calib_dir, '*.npy')))
-    if len(npy_files) == 0:
-        raw_files = sorted(glob.glob(os.path.join(calib_dir, '**/*.raw'), recursive=True))
-        if len(raw_files) == 0:
+    # 清理旧的校准文件
+    for old in glob.glob(os.path.join(calib_output_dir, '*.npy')):
+        os.remove(old)
+
+    dataset_lines = []
+
+    # 策略1: 检测 IMX585 场景目录 (含 S1.npy + L.npy 子目录)
+    scene_dirs = sorted(glob.glob(os.path.join(calib_dir, '*/')))
+    scene_dirs = [d for d in scene_dirs if os.path.isdir(d)]
+
+    paired_samples = []
+    for sd in scene_dirs:
+        s1_path = os.path.join(sd, 'S1.npy')
+        s2_path = os.path.join(sd, 'S2.npy')
+        l_path  = os.path.join(sd, 'L.npy')
+        if os.path.exists(s1_path) and os.path.exists(s2_path):
+            paired_samples.append((s1_path, s2_path, l_path))
+
+    if paired_samples:
+        print('Found %d paired S1/S2/L scene directories for calibration.' % len(paired_samples))
+        for idx, (s1, s2, l_path) in enumerate(paired_samples[:max_samples]):
+            s1_data = np.load(s1)
+            s2_data = np.load(s2)
+            l_data  = np.load(l_path) if os.path.exists(l_path) else np.zeros_like(s1_data)
+
+            # RGGB Bayer → 4-channel 并归一化到 [0,1]
+            if s1_data.ndim == 2:
+                s1_rggb = _bayer_to_rggb_calib(s1_data, height, width)
+                s2_rggb = _bayer_to_rggb_calib(s2_data, height, width)
+                l_rggb  = _bayer_to_rggb_calib(l_data, height, width)
+            else:
+                # 已经是 [C, H, W] 格式
+                s1_rggb = s1_data.astype(np.float32)[:4, :height, :width]
+                s2_rggb = s2_data.astype(np.float32)[:4, :height, :width]
+                l_rggb  = l_data.astype(np.float32)[:4, :height, :width]
+
+            short_cat = np.concatenate([s1_rggb, s2_rggb], axis=0)  # [8, H, W]
+
+            short_path = os.path.join(calib_output_dir, 'short_%04d.npy' % idx)
+            long_path  = os.path.join(calib_output_dir, 'long_%04d.npy' % idx)
+            np.save(short_path, short_cat.astype(np.float32))
+            np.save(long_path,  l_rggb.astype(np.float32))
+            dataset_lines.append('%s %s' % (short_path, long_path))
+
+    # 策略2: 单个 .npy 文件 (旧格式, 用加噪模拟 S1≠S2)
+    if not paired_samples:
+        npy_files = sorted(glob.glob(os.path.join(calib_dir, '*.npy')))
+        if len(npy_files) == 0:
+            raw_files = sorted(glob.glob(os.path.join(calib_dir, '**/*.raw'), recursive=True))
+            npy_files = raw_files[:max_samples]
+
+        if len(npy_files) == 0:
             print('WARNING: No calibration data found in %s' % calib_dir)
             print('Generating random calibration data for testing...')
-            raw_files = []
             for i in range(min(max_samples, 100)):
                 data = np.random.rand(4, height, width).astype(np.float32)
                 path = os.path.join(calib_output_dir, 'random_%04d.npy' % i)
                 np.save(path, data)
-                raw_files.append(path)
-            npy_files = raw_files
-        else:
-            npy_files = raw_files[:max_samples]
+                npy_files.append(path)
 
-    # 生成校准样本 npy 文件（双输入: short_cat + long_raw）
-    dataset_lines = []
-    for idx, f in enumerate(npy_files[:max_samples]):
-        if f.endswith('.npy'):
-            data = np.load(f)
-        else:
-            data = np.fromfile(f, dtype=np.float32).reshape(4, height, width)
-        if data.ndim == 4:
-            data = data[0]  # [4, H, W]
+        print('Found %d single .npy files (S2 will be S1+noise for realistic INT8 calib).' % len(npy_files[:max_samples]))
+        for idx, f in enumerate(npy_files[:max_samples]):
+            if f.endswith('.npy'):
+                data = np.load(f)
+            else:
+                data = np.fromfile(f, dtype=np.float32).reshape(4, height, width)
+            if data.ndim == 4:
+                data = data[0]  # [4, H, W]
+            data = data.astype(np.float32)
 
-        short_cat = np.concatenate([data, data], axis=0)  # [8, H, W]
-        long_raw = data  # [4, H, W]
+            s1_data = data[:4, :height, :width]
+            # S2 = S1 + 小噪声, 模拟独立短帧 (对 INT8 量化更真实)
+            noise = np.random.randn(*s1_data.shape).astype(np.float32) * 0.01
+            s2_data = np.clip(s1_data + noise, 0.0, 1.0)
+            l_data  = s1_data  # 长帧用同一帧近似
 
-        short_path = os.path.join(calib_output_dir, 'short_%04d.npy' % idx)
-        long_path = os.path.join(calib_output_dir, 'long_%04d.npy' % idx)
-        np.save(short_path, short_cat)
-        np.save(long_path, long_raw)
-        dataset_lines.append('%s %s' % (short_path, long_path))
+            short_cat = np.concatenate([s1_data, s2_data], axis=0)  # [8, H, W]
+
+            short_path = os.path.join(calib_output_dir, 'short_%04d.npy' % idx)
+            long_path  = os.path.join(calib_output_dir, 'long_%04d.npy' % idx)
+            np.save(short_path, short_cat.astype(np.float32))
+            np.save(long_path,  l_data.astype(np.float32))
+            dataset_lines.append('%s %s' % (short_path, long_path))
 
     # 写入校准列表文件
     dataset_txt = os.path.join(calib_output_dir, 'dataset.txt')
@@ -84,6 +137,17 @@ def collect_calibration_data(calib_dir, max_samples=200, height=540, width=960):
 
     print('Collected %d calibration samples, list saved to %s' % (len(dataset_lines), dataset_txt))
     return dataset_txt
+
+
+def _bayer_to_rggb_calib(bayer, height, width):
+    """快速 RGGB Bayer → 4-plane RGGB (同 IMX585 的 Bayer 排列)"""
+    bayer = bayer.astype(np.float32)
+    bayer = np.clip(bayer / 4095.0, 0.0, 1.0)  # 12-bit → [0,1]
+    R  = bayer[0::2, 0::2][:height, :width]
+    Gr = bayer[0::2, 1::2][:height, :width]
+    Gb = bayer[1::2, 0::2][:height, :width]
+    B  = bayer[1::2, 1::2][:height, :width]
+    return np.stack([R, Gr, Gb, B], axis=0)
 
 
 def convert_onnx_to_rknn(onnx_path, output_path, calib_dir, target='rk3588',

@@ -107,6 +107,39 @@ class RAW3RGB_dataset(data.Dataset):
         rand_w = (rand_w // min_divide) * min_divide
         return rand_h, rand_w
 
+    @staticmethod
+    def demosaic_bayer(bayer_raw, bayer_pattern='RGGB', max_val=4095.0):
+        """Demosaic RAW Bayer → 16-bit RGB → normalize to [0,1]
+
+        Args:
+            bayer_raw: [H, W] np.float32 or np.uint16 RAW Bayer
+            bayer_pattern: 'RGGB' | 'BGGR' | 'GBRG' | 'GRBG'
+            max_val: white level (12-bit → 4095, 10-bit → 1023)
+        Returns:
+            rgb: [3, H, W] np.float32 in [0, 1]
+        """
+        import cv2
+        if bayer_raw.dtype != np.uint16:
+            bayer_raw = np.clip(bayer_raw, 0, max_val)
+            bayer_16 = (bayer_raw / max_val * 65535.0).astype(np.uint16)
+        else:
+            bayer_16 = bayer_raw
+
+        bayer_to_rgb_map = {
+            'RGGB': cv2.COLOR_BayerRG2RGB,
+            'BGGR': cv2.COLOR_BayerBG2RGB,
+            'GBRG': cv2.COLOR_BayerGB2RGB,
+            'GRBG': cv2.COLOR_BayerGR2RGB,
+        }
+        code = bayer_to_rgb_map.get(bayer_pattern)
+        if code is None:
+            raise ValueError(f'Unknown Bayer pattern: {bayer_pattern}')
+
+        rgb_16 = cv2.cvtColor(bayer_16, code)
+        rgb = rgb_16.astype(np.float32) / 65535.0  # [0, 1]
+        rgb = rgb.transpose(2, 0, 1)  # [H, W, 3] → [3, H, W]
+        return rgb
+
     def _load_raw_frame(self, raw_path):
         raw_bytes = np.fromfile(raw_path, dtype=np.uint8)
         bayer = self.unpack_sbggr10p(raw_bytes, self.raw_width, self.raw_height,
@@ -135,7 +168,7 @@ class RAW3RGB_dataset(data.Dataset):
             gt = gt.transpose(2, 0, 1)
 
             if self.random_crop:
-                rh, rw = self.random_crop_start(H, W, self.crop_size, min_divide=1)
+                rh, rw = self.random_crop_start(H, W, self.crop_size, min_divide=2)
                 short1 = short1[:, rh:rh+self.crop_size, rw:rw+self.crop_size]
                 long = long[:, rh:rh+self.crop_size, rw:rw+self.crop_size]
                 short2 = short2[:, rh:rh+self.crop_size, rw:rw+self.crop_size]

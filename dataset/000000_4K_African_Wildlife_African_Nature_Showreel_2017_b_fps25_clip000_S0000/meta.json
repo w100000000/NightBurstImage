@@ -1,0 +1,165 @@
+{
+  "capture_status": "complete",
+  "created_at": "2026-05-28T14:43:31",
+  "manifest_index": 0,
+  "manifest_index_str": "000000",
+  "sample_id": "4K_African_Wildlife_African_Nature_Showreel_2017_b_fps25_clip000_S0000",
+  "frame_order": [
+    "S1",
+    "L",
+    "S2"
+  ],
+  "camera": {
+    "model": "ZWO ASI585MC",
+    "sensor": "Sony IMX585",
+    "zwo_camera_property": {
+      "Name": "ZWO ASI585MC",
+      "CameraID": 0,
+      "MaxHeight": 2160,
+      "MaxWidth": 3840,
+      "IsColorCam": true,
+      "BayerPattern": 0,
+      "SupportedBins": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "SupportedVideoFormat": [
+        0,
+        1,
+        3,
+        2
+      ],
+      "PixelSize": 2.9,
+      "MechanicalShutter": false,
+      "ST4Port": 1,
+      "IsCoolerCam": false,
+      "IsUSB3Host": true,
+      "IsUSB3Camera": true,
+      "ElecPerADU": 0.2972540855407715,
+      "BitDepth": 12,
+      "IsTriggerCam": 0
+    },
+    "sdk_bayer_pattern_value": 0,
+    "resolved_bayer_pattern": "RGGB",
+    "bit_depth": 12,
+    "roi": {
+      "width": 3840,
+      "height": 2160,
+      "bin": 1,
+      "image_type": 2
+    },
+    "black_level": null,
+    "white_level": null
+  },
+  "exposure_us": {
+    "S1": 16667,
+    "L": 83333,
+    "S2": 16667,
+    "GT_mid": 16667
+  },
+  "gain": {
+    "S1": 300,
+    "L": 0,
+    "S2": 300,
+    "GT_mid": 300
+  },
+  "gt_average_count": 200,
+  "source_images": {
+    "S1": "E:\\s_l_s_dataset\\final_dataset\\final_S1_L_S2\\4K_African_Wildlife_African_Nature_Showreel_2017_b_fps25_clip000_S0000\\S1.png",
+    "L": "E:\\s_l_s_dataset\\final_dataset\\final_S1_L_S2\\4K_African_Wildlife_African_Nature_Showreel_2017_b_fps25_clip000_S0000\\L.png",
+    "S2": "E:\\s_l_s_dataset\\final_dataset\\final_S1_L_S2\\4K_African_Wildlife_African_Nature_Showreel_2017_b_fps25_clip000_S0000\\S2.png",
+    "GT_mid": "E:\\s_l_s_dataset\\final_dataset\\final_S1_L_S2\\4K_African_Wildlife_African_Nature_Showreel_2017_b_fps25_clip000_S0000\\GT.png",
+    "meta_txt": "E:\\s_l_s_dataset\\final_dataset\\final_S1_L_S2\\4K_African_Wildlife_African_Nature_Showreel_2017_b_fps25_clip000_S0000\\meta.txt"
+  },
+  "source_preparation_meta": {
+    "L_frames": 80,
+    "Vacancy": 35,
+    "Window": 172
+  },
+  "saved_files": {
+    "S1": "S1.npy",
+    "L": "L.npy",
+    "S2": "S2.npy",
+    "GT_mid": "GT_mid.npy",
+    "preview": {
+      "S1": "preview\\S1_vis.png",
+      "L": "preview\\L_vis.png",
+      "S2": "preview\\S2_vis.png",
+      "GT_mid": "preview\\GT_mid_vis.png"
+    }
+  },
+  "visualization": {
+    "purpose": "human_quality_check_only",
+    "raw_pattern": "RGGB",
+    "opencv_demosaic_modes": {
+      "S1": "demosaic",
+      "L": "demosaic",
+      "S2": "demosaic",
+      "GT_mid": "demosaic"
+    },
+    "low_percentile": 0.5,
+    "high_percentile": 99.7,
+    "gamma": 0.45454545454545453
+  },
+  "stats": {
+    "S1": {
+      "shape": [
+        2160,
+        3840
+      ],
+      "dtype": "uint16",
+      "min": 0.0,
+      "max": 18400.0,
+      "mean": 799.3371122685185,
+      "p01": 96.0,
+      "p50": 608.0,
+      "p999": 3776.0,
+      "saturation_ratio": 0.0
+    },
+    "L": {
+      "shape": [
+        2160,
+        3840
+      ],
+      "dtype": "uint16",
+      "min": 0.0,
+      "max": 11280.0,
+      "mean": 614.1965354938271,
+      "p01": 80.0,
+      "p50": 464.0,
+      "p999": 2720.0,
+      "saturation_ratio": 0.0
+    },
+    "S2": {
+      "shape": [
+        2160,
+        3840
+      ],
+      "dtype": "uint16",
+      "min": 0.0,
+      "max": 18432.0,
+      "mean": 809.927037037037,
+      "p01": 96.0,
+      "p50": 624.0,
+      "p999": 3808.0,
+      "saturation_ratio": 0.0
+    },
+    "GT_mid": {
+      "shape": [
+        2160,
+        3840
+      ],
+      "dtype": "float32",
+      "min": 112.4800033569336,
+      "max": 17942.9609375,
+      "mean": 859.3739624023438,
+      "p01": 194.0,
+      "p50": 715.1199951171875,
+      "p999": 3133.760009765625,
+      "saturation_ratio": 1.2056327160493827e-07
+    }
+  },
+  "warnings": []
+}

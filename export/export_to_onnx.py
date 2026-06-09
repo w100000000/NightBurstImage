@@ -26,7 +26,7 @@ from easydict import EasyDict as edict
 from models.network import NBINet
 
 
-def export_to_onnx(model_path, output_path, height=540, width=960, opset=11):
+def export_to_onnx(model_path, output_path, height=540, width=960, opset=12):
     """
     将 NBINet 导出为 ONNX 格式
 
@@ -115,7 +115,7 @@ if __name__ == '__main__':
     parser.add_argument('--output_path', type=str, default='export/nbinet.onnx', help='ONNX output path')
     parser.add_argument('--height', type=int, default=540, help='RAW input height (1080p→540)')
     parser.add_argument('--width', type=int, default=960, help='RAW input width (1080p→960)')
-    parser.add_argument('--opset', type=int, default=11, help='ONNX opset version')
+    parser.add_argument('--opset', type=int, default=12, help='ONNX opset version')
     args = parser.parse_args()
 
     export_to_onnx(args.model_path, args.output_path, args.height, args.width, args.opset)
