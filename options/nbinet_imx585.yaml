@@ -1,17 +1,15 @@
-# ============================================================
-# NBINet 训练配置 — IMX585 (ZWO ASI585MC) 数据集
-# 4216 组 S1/L/S2 三帧 RAW, 12-bit RGGB Bayer
-# 用于预训练, 后续转到 OV13855 微调
-# ============================================================
+# NBINet training config — IMX585 (ZWO ASI585MC) dataset
+# 4160 groups S1/L/S2 3-frame RAW, 12-bit RGGB Bayer
+# Pretrain on server, then finetune on OV13855
 
 save_mode: epoch
 save_by_epoch: 1
 cudnn_benchmark: True
 
 Training_config:
-  phase: unified                    # 单阶段训练
+  phase: unified
   epochs: 200
-  train_batch_size: 8               # 服务器 GPU 显存大, batch 可以开大
+  train_batch_size: 8
   val_batch_size: 1
   num_workers: 8
   start_idx: 0
@@ -52,14 +50,14 @@ Optimizer:
   lr_decrease_factor: 0.5
 
 Dataset:
-  dataset_type: 'imx585'            # 'imx585' | 'ov13855'
-  root_path: './dataset'            # IMX585 数据集根目录
+  dataset_type: 'imx585'
+  root_path: '/home/dc2026_2/dataset/raw_d2hnet_asi585mc'
   input_format: 'raw_rggb'
   gt_format: 'rgb'
-  max_val: 4095                     # 12-bit 白电平
-  black_level: 96                   # IMX585 暗电平 (p01 估计)
-  bayer_pattern: 'RGGB'             # IMX585 原生 Bayer
+  max_val: 4095
+  black_level: 96
+  bayer_pattern: 'RGGB'
   noise_aug: False
   random_crop: True
-  crop_size: 320                    # 4K 数据裁切空间大, 可以用更大 patch
+  crop_size: 320
   patch_per_image: 4
