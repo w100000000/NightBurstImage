@@ -1,0 +1,48 @@
+#!/bin/sh
+#
+# S99autoplay — 上电自动循环播放视频 (MIPI屏, 硬解码, 宣传用)
+#
+# Install: scp S99autoplay root@192.168.0.232:/etc/init.d/
+#           ssh root@192.168.0.232 "chmod +x /etc/init.d/S99autoplay"
+# Disable:  mv /etc/init.d/S99autoplay /etc/init.d/_S99autoplay.disabled
+# Test:     /etc/init.d/S99autoplay start
+
+VIDEO=/mnt/sdcard/video_1024x600_6fps.mp4
+export XDG_RUNTIME_DIR=/run
+export WAYLAND_DISPLAY=wayland-0
+
+case "$1" in
+    start)
+        echo "[autoplay] scheduled (waits for Weston in background)"
+        # 整段丢后台: 等 Weston 起来 → 无限循环播放, 不阻塞开机
+        (
+            for i in $(seq 1 30); do
+                if pidof weston > /dev/null 2>&1; then break; fi
+                sleep 1
+            done
+            sleep 2
+
+            [ -f "$VIDEO" ] || { echo "[autoplay] video not found: $VIDEO"; exit 1; }
+
+            while true; do
+                if command -v gst-play-1.0 > /dev/null 2>&1; then
+                    gst-play-1.0 "$VIDEO" 2>/dev/null
+                else
+                    gst-launch-1.0 filesrc location="$VIDEO" ! \
+                        qtdemux ! queue ! h264parse ! mppvideodec ! waylandsink 2>/dev/null
+                fi
+                sleep 1
+            done
+        ) &
+        ;;
+    stop)
+        echo "[autoplay] Stopping..."
+        killall gst-play-1.0 gst-launch-1.0 2>/dev/null
+        ;;
+    restart)
+        "$0" stop; sleep 1; "$0" start
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart}"
+        ;;
+esac

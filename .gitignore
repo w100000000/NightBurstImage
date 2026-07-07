@@ -205,3 +205,20 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Pipeline build artifacts
+pipeline/core/*.o
+pipeline/core/pipeline
+pipeline/core/asi_snap
+pipeline/core/asi_stream
+pipeline/core/lpr_server
+
+# 运行时产物 / 调试 dump
+*.bmp
+plates.txt
+cap_*.bmp
+debug_dumps/
+
+# 但部署运行库必须保留 (上面通用 lib/ 规则会误伤 pipeline/lib/)
+!pipeline/lib/
+!pipeline/lib/*

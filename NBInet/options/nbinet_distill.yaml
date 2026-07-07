@@ -1,0 +1,87 @@
+save_mode: epoch
+save_by_epoch: 1
+cudnn_benchmark: True
+
+Training_config:
+  phase: distill                    # 蒸馏训练（DistillTrainer）
+  epochs: 150
+  train_batch_size: 2
+  val_batch_size: 1
+  num_workers: 8
+  start_idx: 0
+  show_loss_iter: 100
+  show_img_iter: 2000
+
+# ========================
+# Student 网络（部署到 RK3588）
+# ========================
+GNet:
+  name: 'NBINet'
+  init_type: 'kaiming'
+  init_gain: 0.02
+  finetune_path: ''
+  force_load: False
+  args:
+    in_channel: 4                   # RAW RGGB
+    out_channel: 3                  # RGB 输出
+    ngf: 10                         # 轻量化（~77K 参数）
+    activ: 'relu'
+    norm: 'none'
+    pad_type: 'zero'
+    final_activ: 'none'
+    res_num: 2
+    bottleneck_res_num: 4
+
+# ========================
+# Teacher 网络（冻结，仅提供蒸馏信号）
+# ========================
+Teacher:
+  name: 'NBINet'
+  init_type: 'kaiming'
+  init_gain: 0.02
+  finetune_path: 'snapshot/nbinet_teacher/GNet/GNet-epoch-199.pkl'
+  force_load: False
+  args:
+    in_channel: 4
+    out_channel: 3
+    ngf: 32                         # 大模型（~1.2M 参数）
+    activ: 'relu'
+    norm: 'none'
+    pad_type: 'zero'
+    final_activ: 'none'
+    res_num: 4
+    bottleneck_res_num: 8
+
+# ========================
+# Loss: hard target (GT) + soft target (teacher)
+# ========================
+Loss:
+  L1Loss:
+    weight: 1.0                     # hard target 权重
+
+# 蒸馏 loss 权重（不走 LossManager，在 DistillTrainer 中直接使用）
+Distill:
+  soft_weight: 0.5                  # soft target（teacher）权重
+  hard_weight: 1.0                  # hard target（GT）权重
+
+Optimizer:
+  name: 'Adam'
+  args:
+    lr_g: 0.0002
+    b1: 0.5
+    b2: 0.999
+    weight_decay: 0.0
+  lr_decrease_mode: 'epoch'
+  lr_decrease_epoch: 60
+  lr_decrease_factor: 0.5
+
+Dataset:
+  train_path: './data/raw/train'
+  val_path: './data/raw/val'
+  input_format: 'raw_rggb'
+  gt_format: 'rgb'
+  black_level: 64                  # OV13855 10-bit 黑电平
+  noise_aug: False
+  random_crop: True
+  crop_size: 256                   # RAW RGGB 平面裁剪尺寸
+  patch_per_image: 4

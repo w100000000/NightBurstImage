@@ -1,0 +1,28 @@
+name: nightburstimage
+channels:
+  - pytorch
+  - nvidia
+  - defaults
+
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+      # PyTorch (CUDA 11.8, 支持 RTX 3090)
+      - torch==2.1.2+cu118
+      - torchvision==0.16.2+cu118
+      - --extra-index-url https://download.pytorch.org/whl/cu118
+
+      # 训练核心
+      - easydict
+      - pyyaml
+      - tensorboardX
+      - opencv-python
+      - numpy
+      - scipy
+      - pillow
+      - scikit-image
+
+      # ONNX 导出验证
+      - onnx
+      - onnxruntime
