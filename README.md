@@ -2,19 +2,8 @@
 
 > 基于飞凌 **ELF2（瑞芯微 RK3588）** 开发板的端侧 AI 视觉系统：以 RAW 相机采集夜间/低照度图像，经 **NPU 实时去噪增强** 后进行 **车牌检测与识别**，结果实时显示到 MIPI 屏，并通过板载 WiFi 提供手机端查询。全流程运行于边缘端，**无需联网、无需 PC，上电即用**。
 
-<p align="center">
-  <em>2026 全国大学生嵌入式芯片与系统设计竞赛 · 瑞芯微赛题（选题方向二：端侧 AI 视觉应用）</em>
-</p>
 
----
 
-##  效果演示
-
-| 处理前（原始短曝光） | 处理后（NBINet 去噪） |
-|:---:|:---:|
-| ![before](docs/before.png) | ![after](docs/after.png) |
-
-> 更多演示：`docs/` 下的去噪流程对比图、车牌识别截图、手机查询界面。
 ##  效果演示
 
 | 硬件系统 | 板端暗室实测 | 实时成像效果 |
@@ -25,7 +14,9 @@
 |:---:|:---:|:---:|
 | ![PC端去噪增强算法效果1](tmp/PC端去噪增强算法效果1.png) | ![PC端去噪增强算法效果2](tmp/PC端去噪增强算法效果2.png) | ![Web端查询界面](tmp/Web端查询界面.png) |
 
-> 以上图片均来自 `tmp/` 目录，分别展示了硬件搭建、暗光实测、实时成像、算法增强效果和 Web 查询界面。
+
+##  数据集下载
+[`final_dataset.tar.gz`](https://pan.baidu.com/s/1JAN0ICNXZUZWwl9aJzcy7Q?pwd=2ydb)，提取码 `2ydb`。
 
 ---
 
@@ -42,21 +33,7 @@
 
 ##  系统架构
 
-```
-                    ┌── 显示线程 (DRM/KMS) ──► MIPI 屏 1024×600
-相机(RAW)            │
-  │ USB2             │
-  ▼                  │
-采集线程 ──► [RAW环形缓冲] ──► 去噪线程 (NBINet @ NPU, FP16)
-(Bayer→RGGB)                        │  去噪RGB
-                                    ├──► 显示环形缓冲 ──► 显示线程
-                                    └──► 识别环形缓冲 ──► 识别线程 (HyperLPR3 @ CPU/ncnn)
-                                                              │  车牌号+抓拍图
-                                                              ▼
-                                                   plates.txt / *.bmp
-                                                              │
-                                                   lpr_server (HTTP) ──WiFi──► 手机浏览器查询
-```
+![系统架构](tmp/系统架构.png)
 
 四线程通过环形缓冲解耦，去噪与识别各自消费全部帧，互不阻塞。
 
@@ -153,9 +130,9 @@ export LD_LIBRARY_PATH=/tmp:/mnt/sdcard:$LD_LIBRARY_PATH
 
 本项目基于以下优秀开源工作：
 
-- [D2HNet](https://github.com/zhaoyuzhi/D2HNet) — 双短一长三帧 RAW 融合去噪框架
-- [HyperLPR3](https://github.com/szad670401/HyperLPR) — 中文车牌识别
-- [ncnn](https://github.com/Tencent/ncnn) — 端侧神经网络推理框架
-- [RKNN-Toolkit2](https://github.com/airockchip/rknn-toolkit2) — RK3588 NPU 模型部署
+- [D2HNet](https://github.com/zhaoyuzhi/D2HNet) 
+- [HyperLPR3](https://github.com/szad670401/HyperLPR) 
+- [ncnn](https://github.com/Tencent/ncnn) 
+- [RKNN-Toolkit2](https://github.com/airockchip/rknn-toolkit2) 
 
 

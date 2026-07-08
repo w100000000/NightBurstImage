@@ -47,30 +47,6 @@ void* ring_get(ring_buf_t *rb)
         pthread_cond_wait(&rb->not_empty, &rb->lock);
     if (rb->quit) { pthread_mutex_unlock(&rb->lock); return NULL; }
     void *result;
-    memcpy(&result, rb->slots[rb->tail], rb->elem_size); /* 读回拷贝 */
-    rb->tail = (rb->tail + 1) % rb->size;
-    pthread_cond_signal(&rb->not_full);
-    pthread_mutex_unlock(&rb->lock);
-    return result;
-}
-
-int ring_try_put(ring_buf_t *rb, void *elem)
-{
-    pthread_mutex_lock(&rb->lock);
-    int next = (rb->head + 1) % rb->size;
-    if (next == rb->tail) { pthread_mutex_unlock(&rb->lock); return -1; }
-    memcpy(rb->slots[rb->head], elem, rb->elem_size);
-    rb->head = next;
-    pthread_cond_signal(&rb->not_empty);
-    pthread_mutex_unlock(&rb->lock);
-    return 0;
-}
-
-void* ring_try_get(ring_buf_t *rb)
-{
-    pthread_mutex_lock(&rb->lock);
-    if (rb->head == rb->tail) { pthread_mutex_unlock(&rb->lock); return NULL; }
-    void *result;
     memcpy(&result, rb->slots[rb->tail], rb->elem_size);
     rb->tail = (rb->tail + 1) % rb->size;
     pthread_cond_signal(&rb->not_full);

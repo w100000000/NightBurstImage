@@ -12,7 +12,7 @@ import util.parallel as P
 import util.visualboard as V
 
 
-def pack_network_output(out, net_name):
+def pack_network_output(out):
     if isinstance(out, torch.Tensor):
         return {'output': out}
     elif isinstance(out, list) or isinstance(out, tuple):
@@ -49,7 +49,7 @@ class LossManager(L.LossBase):
                     func = getattr(L, k)()
                 self.criterions[k] = func.to(self.device)
 
-    def __call__(self, output, gt_dict, fake_out=None):
+    def __call__(self, output, gt_dict):
         out = output['output']
         gt_img = gt_dict['RGBout_img']
 

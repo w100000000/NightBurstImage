@@ -1,5 +1,3 @@
-import torch
-
 from models import network
 
 
@@ -28,11 +26,3 @@ def create_generator_val(GNet_opt, model_path = None, force_load = False):
         print('Generator is loaded!')
     return generator
 
-
-def load_dict(process_net, pretrained_net):
-    pretrained_dict = pretrained_net
-    process_dict = process_net.state_dict()
-    pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in process_dict}
-    process_dict.update(pretrained_dict)
-    process_net.load_state_dict(process_dict)
-    return process_net

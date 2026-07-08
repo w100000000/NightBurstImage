@@ -31,7 +31,6 @@
 #define EXP_SHORT   0
 #define EXP_LONG    1
 
-/* Bayer = BGGR → 提取为 RGGB plane 次序 */
 /* ── NPU 输入 ── */
 #define SHORT_CAT_C (FEAT_C * 2)  /* 8 */
 #define LONG_C      FEAT_C        /* 4 */
@@ -47,14 +46,6 @@ static inline int64_t now_us(void)
     return (int64_t)tv.tv_sec * 1000000 + tv.tv_usec;
 }
 
-/* ── RAW 4-plane float (Bayer 提取后) ── */
-typedef struct {
-    float    r[PLANE_H][PLANE_W];   /* 注意: 这些是栈上大数组, 实际用 malloc */
-    float    gb[PLANE_H][PLANE_W];   /* 实际 malloc 分配 */
-    float    gr[PLANE_H][PLANE_W];
-    float    b[PLANE_H][PLANE_W];
-} raw_planes_t;
-
 /* 实际用的帧缓冲 */
 typedef struct {
     float   *data;          /* R,Gr,Gb,B 连续: 4 * PLANE_H * PLANE_W floats */
@@ -62,13 +53,6 @@ typedef struct {
     int      exposure;      /* EXP_SHORT or EXP_LONG */
     int      frame_id;
 } raw_buf_t;
-
-/* ── NPU 输入 (打包好的 INT8) ── */
-typedef struct {
-    int8_t  *data;          /* [1,PLANE_H,PLANE_W,C] NHWC, C=4 or 8 */
-    int64_t  ts_us;
-    int      frame_id;
-} npu_input_t;
 
 /* ── RGB 帧 (NPU 输出) ── */
 typedef struct {
@@ -97,8 +81,6 @@ int  ring_init(ring_buf_t *rb, int size, size_t elem_size);
 void ring_destroy(ring_buf_t *rb);
 int  ring_put(ring_buf_t *rb, void *elem);
 void* ring_get(ring_buf_t *rb);
-int  ring_try_put(ring_buf_t *rb, void *elem);
-void* ring_try_get(ring_buf_t *rb);
 void ring_stop(ring_buf_t *rb);
 #ifdef __cplusplus
 }
@@ -127,8 +109,6 @@ typedef struct {
 
     /* NPU 模型信息 */
     int     out_fmt;        /* RKNN_TENSOR_NCHW or NHWC */
-    float  *test_frame;     /* 测试: 直传 NPU 输出给 display */
-    volatile bool test_ready;
 
     /* 配置 */
     int     expo_short_us;
