@@ -85,7 +85,7 @@ ls -l final_dataset/
 ```bash
 scp pipeline lpr_server root@<BOARD_IP>:/tmp/
 scp pipeline/lib/*.so.* root@<BOARD_IP>:/mnt/sdcard/   # 首次: ASI SDK / libusb
-scp models/* root@<BOARD_IP>:/mnt/sdcard/              # 去噪 rknn + 车牌 ncnn 模型 (见 models/)
+scp models/denoise/* models/lpr/* root@<BOARD_IP>:/mnt/sdcard/   # 去噪 rknn + 车牌 ncnn 模型 (见 models/)
 ```
 
 2) 在板子上运行：
