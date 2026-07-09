@@ -6,19 +6,19 @@ from skimage.metrics import structural_similarity
 
 
 # ----------------------------------------
-#    Validation and Sample at training
+#    训练过程中的验证与采样
 # ----------------------------------------
 def save_sample_png(sample_folder, sample_name, img_list, name_list, pixel_max_cnt = 255, save_format = 'png'):
-    # Save image one-by-one
+    # 逐个保存图像
     for i in range(len(img_list)):
         img = img_list[i]
-        # Recover normalization: * 255 because last layer is sigmoid activated
+        # 恢复归一化：乘以 255，因为最后一层是 sigmoid 激活
         img = img * 255
-        # Process img_copy and do not destroy the data of img
+        # 处理 img_copy，不破坏原始 img 数据
         img_copy = img.clone().data.permute(0, 2, 3, 1)[0, :, :, :].cpu().numpy()
         img_copy = np.clip(img_copy, 0, pixel_max_cnt)
         img_copy = img_copy.astype(np.uint8)
-        # Save to certain path
+        # 保存到指定路径
         save_img_name = sample_name + '_' + name_list[i] + '.' + save_format
         save_img_path = os.path.join(sample_folder, save_img_name)
         cv2.imwrite(save_img_path, img_copy)
@@ -50,7 +50,7 @@ def ssim(pred, target):
 
 
 # ----------------------------------------
-#             PATH processing
+#             路径处理
 # ----------------------------------------
 def savetxt(name, loss_log):
     np_loss_log = np.array(loss_log)
@@ -58,7 +58,7 @@ def savetxt(name, loss_log):
 
 
 def get_files(path):
-    # read a folder, return the complete path
+    # 读取文件夹，返回完整路径
     ret = []
     for root, dirs, files in os.walk(path):
         for filespath in files:
@@ -67,7 +67,7 @@ def get_files(path):
 
 
 def get_jpgs(path):
-    # read a folder, return the image name
+    # 读取文件夹，返回图像文件名
     ret = []
     for root, dirs, files in os.walk(path):
         for filespath in files:
@@ -76,7 +76,7 @@ def get_jpgs(path):
 
 
 def get_jpgs_once(paths):
-    # read a folder, return the image name
+    # 读取文件夹，返回去重后的图像文件名
     ret = set([])
     if isinstance(paths, str):
         paths = [paths]
@@ -93,7 +93,7 @@ def get_jpgs_once(paths):
 
 
 def get_blur_file_once(paths):
-    # read a folder, return the image name
+    # 读取模糊图像文件夹，返回去重后的文件名
     ret = set([])
     if isinstance(paths, str):
         paths = [paths]
@@ -110,14 +110,14 @@ def get_blur_file_once(paths):
 
 
 def text_readlines(filename):
-    # Try to read a txt file and return a list.Return [] if there was a mistake.
+    # 尝试读取 txt 文件并返回列表，出错时返回空列表
     try:
         file = open(filename, 'r')
     except IOError:
         error = []
         return error
     content = file.readlines()
-    # This for loop deletes the EOF (like \n)
+    # 循环删除每行末尾的换行符等 EOF 字符
     for i in range(len(content)):
         content[i] = content[i][:len(content[i]) - 1]
     file.close()
@@ -125,8 +125,8 @@ def text_readlines(filename):
 
 
 def text_save(content, filename, mode = 'a'):
-    # save a list to a txt
-    # Try to save a list variable in txt file.
+    # 将列表保存到 txt 文件
+    # 尝试将列表变量写入 txt 文件
     file = open(filename, mode)
     for i in range(len(content)):
         file.write(str(content[i]) + '\n')

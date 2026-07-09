@@ -39,7 +39,7 @@ all: $(TARGET)
 $(TARGET): $(OBJS)
 	$(CXX) -o $@ $^ $(LIBS)
 	@echo "=== Built pipeline (ASI585MC) ==="
-	@echo "Deploy: scp pipeline $(ASI_SDK)/lib/armv8/libASICamera2.so.1.41 root@192.168.0.232:/tmp/"
+	@echo "Deploy: scp pipeline $(ASI_SDK)/lib/armv8/libASICamera2.so.1.41 root@<BOARD_IP>:/tmp/"
 
 asi_capture.o: asi_capture.c pipeline_types.h
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@

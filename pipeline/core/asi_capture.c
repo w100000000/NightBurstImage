@@ -6,6 +6,7 @@
  *
  * 输出 raw_buf_t 到 raw_ring (每帧 4-plane float32, RGGB)
  */
+
 #include "pipeline_types.h"
 #include "ASICamera2.h"
 #include <stdio.h>
@@ -13,8 +14,8 @@
 #include <string.h>
 #include <unistd.h>
 
-#define ASI_BLACK     96.0f    /* IMX585 black level */
-#define ASI_MAX_VAL   4095.0f  /* 12-bit white level */
+#define ASI_BLACK     96.0f    /* IMX585 黑电平 */
+#define ASI_MAX_VAL   4095.0f  /* 12-bit 白电平 */
 #define ASI_RANGE     (ASI_MAX_VAL - ASI_BLACK)  /* 3999 */
 #define ASI_CAM_ID    0
 
@@ -57,6 +58,7 @@ static int asi_init(pipeline_t *p)
     if (ret != ASI_SUCCESS) {
         ASICloseCamera(ASI_CAM_ID); return -1;
     }
+    
     /* 居中 (binned 坐标系, 起点偶数保持 Bayer 相位) */
     int sx = ((fullw - asi_img_w) / 2) & ~1;   /* 480 */
     int sy = ((fullh - asi_img_h) / 2) & ~1;   /* 268 */
@@ -88,8 +90,8 @@ static void asi_cleanup(void) {
     if (asi_connected) { ASIStopVideoCapture(ASI_CAM_ID); ASICloseCamera(ASI_CAM_ID); asi_connected = 0; }
 }
 
-/* Bayer uint16 → 4-plane float [0,1] (channels: R,Gr,Gb,B) */
-/* bayer_pat: 0=RGGB 1=BGGR 2=GRBG 3=GBRG */
+
+
 static void bayer_extract(const uint16_t *bayer, int bw, int bh,
                           float *r, float *gr, float *gb, float *b,
                           int cx, int cy, int bayer_pat, float maxval)
@@ -102,7 +104,7 @@ static void bayer_extract(const uint16_t *bayer, int bw, int bh,
             uint16_t v01 = bayer[by *bw + bx1];
             uint16_t v10 = bayer[by1*bw + bx];
             uint16_t v11 = bayer[by1*bw + bx1];
-            /* clip to [black, max] then normalize to [0,1] — matches training */
+            /* 裁剪到 [黑电平, 最大值] 再归一化到 [0,1]，与训练一致 */
             if (v00 > 4095) v00 = 4095; if (v00 < 96) v00 = 96;
             if (v01 > 4095) v01 = 4095; if (v01 < 96) v01 = 96;
             if (v10 > 4095) v10 = 4095; if (v10 < 96) v10 = 96;
@@ -112,13 +114,13 @@ static void bayer_extract(const uint16_t *bayer, int bw, int bh,
             float p10 = ((float)v10 - ASI_BLACK) / ASI_RANGE;
             float p11 = ((float)v11 - ASI_BLACK) / ASI_RANGE;
             switch (bayer_pat) {
-            case 1: /* BGGR: B=00, Gb=01, Gr=10, R=11 */
+            case 1: /* BGGR：B=00, Gb=01, Gr=10, R=11 */
                 r[idx]=p11; gr[idx]=p10; gb[idx]=p01; b[idx]=p00; break;
             case 2: /* GRBG */
                 r[idx]=p01; gr[idx]=p00; gb[idx]=p11; b[idx]=p10; break;
             case 3: /* GBRG */
                 r[idx]=p10; gr[idx]=p11; gb[idx]=p00; b[idx]=p01; break;
-            default: /* RGGB: R=00, Gr=01, Gb=10, B=11 */
+            default: /* RGGB：R=00, Gr=01, Gb=10, B=11 */
                 r[idx]=p00; gr[idx]=p01; gb[idx]=p10; b[idx]=p11; break;
             }
         }
@@ -138,11 +140,6 @@ void *capture_thread(void *arg)
     float maxval = 4095.0f;
     printf("[Capture] Bayer=RGGB(%d) maxval=%.0f (匹配训练 dataset_imx585)\n",
            bayer_pat, maxval);
-
-    /* ASI585MC 上报 BGGR(=1), 使用相机上报值.
-     *   训练代码 RAW3RGB_dataset.bayer_to_rggb() 对 BGGR 正确提取:
-     *     R=bayer[1::2,1::2] Gr=bayer[1::2,0::2] Gb=bayer[0::2,1::2] B=bayer[0::2,0::2] */
-    printf("[Capture] using camera-reported Bayer pattern: %d\n", bayer_pat);
 
     /* 相机硬件 ROI 已是 960×544 (=BAYER_W×BAYER_H), cx=cy=0 不再裁切;
      * 若改回满幅采集, 此处会自动居中裁切, 逻辑通用。 */
@@ -167,7 +164,7 @@ void *capture_thread(void *arg)
     asi_set_exposure_gain(s_exp, s_gain);
     printf("[Capture] S: %dus gain=%d  L: %dus gain=%d\n", s_exp, s_gain, l_exp, l_gain);
     int to_ms = s_exp/1000*2 + 2000;
-    ASIGetVideoData(ASI_CAM_ID, asi_buf, (long)buf_sz, to_ms); /* discard 1 */
+    ASIGetVideoData(ASI_CAM_ID, asi_buf, (long)buf_sz, to_ms); /* 丢弃 1 帧 */
     prev_expo = EXP_SHORT;
 
     while (p->running) {

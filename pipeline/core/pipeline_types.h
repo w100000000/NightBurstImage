@@ -17,7 +17,7 @@
 #include <stdbool.h>
 #include <sys/time.h>
 
-/* ── 分辨率 (模型维度) ── */
+/* 分辨率 (模型维度) */
 #define PLANE_H     272
 #define PLANE_W     480
 #define PLANE_SIZE  (PLANE_H * PLANE_W)          /* 130560 */
@@ -27,18 +27,18 @@
 #define RGB_W       (PLANE_W * 2)                 /* 960 */
 #define FB_W        1024
 #define FB_H        600
-#define FEAT_C      4      /* R,Gr,Gb,B 4 plane */
+#define FEAT_C      4      /* R,Gr,Gb,B 共4个平面 */
 #define EXP_SHORT   0
 #define EXP_LONG    1
 
-/* ── NPU 输入 ── */
+/* NPU 输入 */
 #define SHORT_CAT_C (FEAT_C * 2)  /* 8 */
 #define LONG_C      FEAT_C        /* 4 */
 
-/* ── 环形缓冲 ── */
+/* 环形缓冲 */
 #define RING_SIZE    4
 
-/* ── 时间 ── */
+/* 时间 */
 static inline int64_t now_us(void)
 {
     struct timeval tv;
@@ -108,7 +108,7 @@ typedef struct {
     volatile double  lpr_ms;
 
     /* NPU 模型信息 */
-    int     out_fmt;        /* RKNN_TENSOR_NCHW or NHWC */
+    int     out_fmt;        /* RKNN_TENSOR_NCHW 或 NHWC */
 
     /* 配置 */
     int     expo_short_us;

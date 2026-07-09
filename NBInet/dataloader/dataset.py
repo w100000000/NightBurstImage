@@ -10,7 +10,6 @@ class RAW3RGB_dataset(data.Dataset):
     """RAW 域三帧融合数据集
 
     加载 3 帧 RAW（短1-长-短2）+ 1 帧 RGB GT。
-    RAW 格式：V4L2 SBGGR10P（OV13855, 10-bit packed Bayer, BGGR 排列）。
 
     目录结构:
         data/raw/train/scene001/short1.raw
@@ -87,12 +86,7 @@ class RAW3RGB_dataset(data.Dataset):
 
     @staticmethod
     def bayer_to_rggb(bayer):
-        """从 BGGR Bayer mosaic 提取 4 平面 → RGGB 通道顺序
-
-        OV13855 BGGR 排列:
-            行0: B  Gb B  Gb ...
-            行1: Gr R  Gr R  ...
-        """
+    """将 Bayer 输出转为 4-plane RGGB (同 IMX585 的 Bayer 排列)"""
         R  = bayer[1::2, 1::2]
         Gr = bayer[1::2, 0::2]
         Gb = bayer[0::2, 1::2]
@@ -109,14 +103,14 @@ class RAW3RGB_dataset(data.Dataset):
 
     @staticmethod
     def demosaic_bayer(bayer_raw, bayer_pattern='RGGB', max_val=4095.0):
-        """Demosaic RAW Bayer → 16-bit RGB → normalize to [0,1]
+        """Demosaic RAW Bayer → 16-bit RGB, 归一化到 [0,1]
 
         Args:
-            bayer_raw: [H, W] np.float32 or np.uint16 RAW Bayer
+            bayer_raw: [H, W] np.float32 或 np.uint16 RAW Bayer
             bayer_pattern: 'RGGB' | 'BGGR' | 'GBRG' | 'GRBG'
-            max_val: white level (12-bit → 4095, 10-bit → 1023)
+            max_val: 白电平 (12-bit → 4095, 10-bit → 1023)
         Returns:
-            rgb: [3, H, W] np.float32 in [0, 1]
+            rgb: [3, H, W] np.float32, 数值范围 [0, 1]
         """
         import cv2
         if bayer_raw.dtype != np.uint16:

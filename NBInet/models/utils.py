@@ -2,7 +2,7 @@ from models import network
 
 
 # ----------------------------------------
-#                 Network
+#                 网络
 # ----------------------------------------
 def create_generator(GNet_opt):
     generator = getattr(network, GNet_opt.name)(GNet_opt.args)

@@ -1,7 +1,7 @@
 /*
  * lpr_worker.c — CPU 车牌识别 (ncnn) 完整实现
  *
- * Pipeline: rgb_ring → YOLO detect → crop ROI → CTC recognize → classify → log
+ * 流水线: rgb_ring → YOLO 检测 → 裁剪 ROI → CTC 识别 → 分类 → 日志
  *
  * 基于 HyperLPR3 (https://github.com/szad670401/HyperLPR):
  *   - YOLO anchors/decode 来自 Prj-Python/hyperlpr3/common/tools_process.py
@@ -22,14 +22,14 @@
  *  HyperLPR3 常量
  * ══════════════════════════════════════════════════════════════════════ */
 
-/* ── YOLO detection ── */
+/* ── YOLO 检测 ── */
 #define YOLO_IN_W       320
 #define YOLO_IN_H       320
 #define YOLO_CONF       0.35f
 #define YOLO_NMS        0.5f
 #define MAX_DET          20
 
-/* anchors for 320 input (9 pairs, grouped by mask [[0,1,2],[3,4,5],[6,7,8]]) */
+/* 320 输入的 anchors（9 对，按 mask 分组 [[0,1,2],[3,4,5],[6,7,8]]）*/
 static const float YOLO_ANCHORS[9][2] = {
     {9.38281f,  3.08398f}, {15.53125f, 4.93750f}, {19.98438f, 7.78906f},
     {31.10938f, 10.35156f}, {45.21875f, 14.14844f}, {32.34375f, 21.04688f},
@@ -39,11 +39,11 @@ static const int YOLO_MASKS[3][3] = {{0,1,2}, {3,4,5}, {6,7,8}};
 static const int YOLO_GRIDS[3][2]  = {{40,40}, {20,20}, {10,10}};
 static const int YOLO_STRIDES[3]   = {8, 16, 32};
 
-/* ── CTC recognition ── */
+/* ── CTC 识别 ── */
 #define CTC_IN_W        160
 #define CTC_IN_H         48
-#define CTC_OUT_T        20    /* time steps (rpv3模型实际输出[1,20,78], 原写40会读越界出乱码尾巴) */
-#define CTC_NCLASS        78   /* blank + 77 chars */
+#define CTC_OUT_T        20    /* 时间步数 (rpv3模型实际输出[1,20,78], 原写40会读越界出乱码尾巴) */
+#define CTC_NCLASS        78   /* blank + 77 个字符 */
 #define CTC_BLANK          0
 
 static const char *CTC_ALPHABET[78] = {
@@ -72,7 +72,7 @@ static const char *CTC_ALPHABET[78] = {
     "\xe4\xbd\xbf",  /*  使 */  "\xe6\xbe\xb3",  /*  澳 */
 };
 
-/* ── Classification ── */
+/* ── 分类 ── */
 #define CLS_IN_W         96
 #define CLS_IN_H         96
 #define CLS_NCLASS        3
@@ -80,7 +80,7 @@ static const char *CTC_ALPHABET[78] = {
 static const char *CLS_LABELS[3] = {"Blue", "Green", "Yellow"};
 
 /* ══════════════════════════════════════════════════════════════════════
- *  Math helpers
+ *  数学辅助函数
  * ══════════════════════════════════════════════════════════════════════ */
 
 static inline float sigmoid_f(float x) {
@@ -99,7 +99,7 @@ static inline int argmax(const float *v, int n) {
 }
 
 /* ══════════════════════════════════════════════════════════════════════
- *  Bilinear resize (CHW float)
+ *  双线性缩放 (CHW float)
  * ══════════════════════════════════════════════════════════════════════ */
 
 static void resize_chw(const float *src, int sh, int sw,
@@ -172,19 +172,19 @@ static void bmp_write_chw_bgr(const char *path, const float *chw, int w, int h)
  * ══════════════════════════════════════════════════════════════════════ */
 
 typedef struct {
-    float x1, y1, x2, y2;   /* image coordinates */
+    float x1, y1, x2, y2;   /* 图像坐标 */
     float conf;
-    int   klass;             /* layer: 0=single, 1=double */
+    int   klass;             /* 层: 0=单排, 1=双排 */
 } bbox_t;
 
-/* YOLO raw output: 3 tensors, each [3, 6, H, W] reshaped to [H, W, 3, 6]
-   where 6 = (x, y, w, h, conf, class_prob) */
+/* YOLO 原始输出: 3 个张量, 每个 [3, 6, H, W] 重排为 [H, W, 3, 6]
+   其中 6 = (x, y, w, h, conf, class_prob) */
 static int yolo_decode_raw(const float *feat, int gh, int gw,
                             int stride, int mask_idx,
                             bbox_t *boxes, int max_box)
 {
     int count = 0;
-    int na = 3; /* 3 anchors per grid */
+    int na = 3; /* 每个网格 3 个 anchor */
 
     for (int gy = 0; gy < gh && count < max_box; gy++) {
         for (int gx = 0; gx < gw && count < max_box; gx++) {
@@ -193,7 +193,7 @@ static int yolo_decode_raw(const float *feat, int gh, int gw,
                 float aw = YOLO_ANCHORS[ai][0];
                 float ah = YOLO_ANCHORS[ai][1];
 
-                /* feat layout: [H, W, 3_anchors, 6_values] */
+                /* 特征布局: [H, W, 3_anchors, 6_values] */
                 int off = ((gy * gw + gx) * na + a) * 6;
 
                 float bx = sigmoid_f(feat[off + 0]) * 2.0f - 0.5f + (float)gx;
@@ -207,7 +207,7 @@ static int yolo_decode_raw(const float *feat, int gh, int gw,
 
                 if (score < YOLO_CONF) continue;
 
-                /* convert to image coordinates (cxcywh in 320x320 space) */
+                /* 转换为图像坐标 (320x320 空间中的 cxcywh) */
                 float cx = bx * stride;
                 float cy = by * stride;
                 float w  = bw * stride;
@@ -226,12 +226,12 @@ static int yolo_decode_raw(const float *feat, int gh, int gw,
     return count;
 }
 
-/* ── NMS (IoU-based) ── */
+/* ── NMS (基于 IoU) ── */
 static int nms_boxes(bbox_t *boxes, int n, float thresh)
 {
     if (n <= 0) return 0;
 
-    /* sort by confidence descending */
+    /* 按置信度降序排序 */
     int *order = (int *)malloc(n * sizeof(int));
     for (int i = 0; i < n; i++) order[i] = i;
 
@@ -248,7 +248,7 @@ static int nms_boxes(bbox_t *boxes, int n, float thresh)
 
     for (int i = 0; i < n; i++) {
         int idx = order[i];
-        if (keep[idx]) continue; /* already suppressed */
+        if (keep[idx]) continue; /* 已被抑制 */
 
         keep[idx] = 1;
         keep_count++;
@@ -272,11 +272,11 @@ static int nms_boxes(bbox_t *boxes, int n, float thresh)
             float jarea = (boxes[jdx].x2 - boxes[jdx].x1) * (boxes[jdx].y2 - boxes[jdx].y1);
             float iou = inter / (barea + jarea - inter);
 
-            if (iou > thresh) keep[jdx] = 1; /* suppress */
+            if (iou > thresh) keep[jdx] = 1; /* 抑制 */
         }
     }
 
-    /* compact: move kept boxes to front */
+    /* 压缩：将保留的框移到前面 */
     int out = 0;
     for (int i = 0; i < n; i++) {
         if (keep[i] && out < i) boxes[out] = boxes[i];
@@ -288,7 +288,7 @@ static int nms_boxes(bbox_t *boxes, int n, float thresh)
 }
 
 /* ══════════════════════════════════════════════════════════════════════
- *  CTC 解码: argmax → skip blank → collapse duplicates
+ *  CTC 解码: argmax → 跳过 blank → 合并重复
  *  对照 HyperLPR3 recognition.py decode()
  * ══════════════════════════════════════════════════════════════════════ */
 
@@ -301,11 +301,11 @@ static int ctc_decode(const float *output, int T, int nclass,
     for (int t = 0; t < T && nt < max_tokens; t++) {
         int best = argmax(output + t * nclass, nclass);
 
-        if (best == CTC_BLANK) {   /* skip blank */
+        if (best == CTC_BLANK) {   /* 跳过 blank */
             prev = -1;
             continue;
         }
-        if (best == prev) continue; /* collapse duplicates */
+        if (best == prev) continue; /* 合并重复 */
         prev = best;
         tokens[nt++] = best;
     }
@@ -324,7 +324,7 @@ extern "C" void *lpr_thread(void *arg)
     char path[512];
     ncnn::Net yolo_net, ctc_net, cls_net;
 
-    /* YOLO */
+    /* YOLO 模型 */
     snprintf(path, sizeof(path), "%s/y5fu_320x_sim.ncnn.param", p->lpr_model_dir);
     if (yolo_net.load_param(path) != 0) {
         fprintf(stderr, "[LPR] FAIL: load YOLO param %s\n", path);
@@ -336,7 +336,7 @@ extern "C" void *lpr_thread(void *arg)
         return NULL;
     }
 
-    /* CTC */
+    /* CTC 模型 */
     snprintf(path, sizeof(path), "%s/rpv3_mdict_160_r3.ncnn.param", p->lpr_model_dir);
     if (ctc_net.load_param(path) != 0) {
         fprintf(stderr, "[LPR] FAIL: load CTC param %s\n", path);
@@ -345,7 +345,7 @@ extern "C" void *lpr_thread(void *arg)
     snprintf(path, sizeof(path), "%s/rpv3_mdict_160_r3.ncnn.bin", p->lpr_model_dir);
     ctc_net.load_model(path);
 
-    /* CLS */
+    /* CLS 模型 */
     snprintf(path, sizeof(path), "%s/litemodel_cls_96x_r1.ncnn.param", p->lpr_model_dir);
     if (cls_net.load_param(path) != 0) {
         fprintf(stderr, "[LPR] FAIL: load CLS param %s\n", path);
@@ -383,7 +383,7 @@ extern "C" void *lpr_thread(void *arg)
         /* resize 去噪 RGB [3,RGB_H,RGB_W] → YOLO 输入 [3,320,320] */
         resize_chw(rgb->data, RGB_H, RGB_W, yolo_in, YOLO_IN_H, YOLO_IN_W);
 
-        /* pack into ncnn::Mat (WHC format) */
+        /* 打包到 ncnn::Mat (WHC 格式) */
         bbox_t boxes[MAX_DET];
         int nbox = 0;
 
@@ -400,25 +400,25 @@ extern "C" void *lpr_thread(void *arg)
             ncnn::Extractor ex = yolo_net.create_extractor();
             ex.input(yolo_net.input_names()[0], in);
 
-            /* probe output format */
+            /* 探测输出格式 */
             auto &out_names = yolo_net.output_names();
             int n_out = (int)out_names.size();
 
             if (n_out == 3) {
-                /* ── Format A: 3 raw feature maps, each [18, H, W] ncnn CHW ── */
+                /* ── 格式 A: 3 个原始特征图, 每个 [18, H, W] ncnn CHW ── */
                 for (int g = 0; g < 3; g++) {
                     ncnn::Mat out;
                     ex.extract(out_names[g], out);
                     int C = out.c, H = out.h, W = out.w;
                     int na = 3, nv = C / na; /* nv = 6 (x,y,w,h,conf,cls) */
 
-                    /* Pack into [H, W, na, nv] float array */
+                    /* 打包为 [H, W, na, nv] float 数组 */
                     float *dec = (float *)malloc(H * W * na * nv * sizeof(float));
                     for (int y = 0; y < H; y++) {
                         for (int x = 0; x < W; x++) {
                             for (int a = 0; a < na; a++) {
                                 for (int v = 0; v < nv; v++) {
-                                    /* ncnn CHW: channel(a*nv+v)[y][x] */
+                                    /* ncnn CHW 格式: channel(a*nv+v)[y][x] */
                                     dec[((y*W + x)*na + a)*nv + v] =
                                         ((float*)out.channel(a*nv + v))[y*W + x];
                                 }
@@ -432,7 +432,7 @@ extern "C" void *lpr_thread(void *arg)
                     free(dec);
                 }
             } else {
-                /* ── Format B: single flat pre-decoded tensor [6300, 15] ──
+                /* ── 格式 B: 单一平坦预解码张量 [6300, 15] ──
                  * PNNX 已做: sigmoid(xy/conf/cls), anchor*grid decode
                  * 15 值/cell: [0:2]=cx,cy [2:4]=w,h [4]=obj_conf [5:13]=landmarks [13:15]=cls
                  * 注意: conf 是原始 float (非 logit), 直接比较阈值, 不需要 sigmoid */
@@ -456,7 +456,7 @@ extern "C" void *lpr_thread(void *arg)
                 int grid_num = total / item_num;
 
                 for (int i = 0; i < grid_num && nbox < MAX_DET; i++) {
-                    /* PNNX model output: conf at [4] is raw float, NOT a logit */
+                    /* PNNX 模型输出: conf 在 [4] 处为原始 float, 非 logit */
                     float conf = flat[i * item_num + 4];
 
                     if (conf < YOLO_CONF) continue;
@@ -478,7 +478,7 @@ extern "C" void *lpr_thread(void *arg)
             }
         }
 
-        /* NMS across all grid outputs */
+        /* 对所有网格输出做 NMS */
         nbox = nms_boxes(boxes, nbox, YOLO_NMS);
 
         int64_t t_yolo = now_us();
@@ -496,7 +496,7 @@ extern "C" void *lpr_thread(void *arg)
         for (int i = 0; i < nbox; i++) {
             bbox_t *b = &boxes[i];
 
-            /* map YOLO coords (320x320) back to original RGB image (RGB_W × RGB_H) */
+            /* 将 YOLO 坐标 (320x320) 映射回原始 RGB 图像 (RGB_W × RGB_H) */
             float scale_x = (float)RGB_W / YOLO_IN_W;
             float scale_y = (float)RGB_H / YOLO_IN_H;
             int x1 = (int)(b->x1 * scale_x);
@@ -504,13 +504,13 @@ extern "C" void *lpr_thread(void *arg)
             int x2 = (int)(b->x2 * scale_x);
             int y2 = (int)(b->y2 * scale_y);
 
-            /* clip */
+            /* 裁剪边界 */
             if (x1 < 0) x1 = 0; if (y1 < 0) y1 = 0;
             if (x2 >= RGB_W) x2 = RGB_W - 1;
             if (y2 >= RGB_H) y2 = RGB_H - 1;
             if (x2 <= x1 || y2 <= y1) continue;
 
-            /* crop ROI from rgb->data [C, H, W] */
+            /* 从 rgb->data [C, H, W] 裁剪 ROI */
             int crop_w = x2 - x1, crop_h = y2 - y1;
             float *roi = (float *)malloc(3 * crop_h * crop_w * sizeof(float));
             for (int c = 0; c < 3; c++)
@@ -519,10 +519,10 @@ extern "C" void *lpr_thread(void *arg)
                            rgb->data + c*RGB_H*RGB_W + (y1+y)*RGB_W + x1,
                            crop_w * sizeof(float));
 
-            /* ── CTC recognition ── */
+            /* ── CTC 识别 ── */
             {
-                /* resize ROI to 48x160, normalize (x-127.5)/127.5 */
-                /* rgb->data is [0,1], so first scale to [0,255] */
+                /* 缩放 ROI 到 48x160, 归一化 (x-127.5)/127.5 */
+                /* rgb->data 为 [0,1], 先缩放到 [0,255] */
                 float *ctc_in = (float *)calloc(3 * CTC_IN_H * CTC_IN_W, sizeof(float));
                 float *roi_255 = (float *)malloc(3 * crop_h * crop_w * sizeof(float));
                 for (int j = 0; j < 3 * crop_h * crop_w; j++)
@@ -530,7 +530,7 @@ extern "C" void *lpr_thread(void *arg)
 
                 resize_chw(roi_255, crop_h, crop_w, ctc_in, CTC_IN_H, CTC_IN_W);
 
-                /* normalize: (x - 127.5) / 127.5 */
+                /* 归一化: (x - 127.5) / 127.5 */
                 for (int j = 0; j < 3 * CTC_IN_H * CTC_IN_W; j++)
                     ctc_in[j] = (ctc_in[j] - 127.5f) / 127.5f;
 
@@ -546,16 +546,16 @@ extern "C" void *lpr_thread(void *arg)
                 ncnn::Mat ctc_out;
                 ex.extract(ctc_net.output_names()[0], ctc_out);
 
-                /* CTC decode: output [CTC_OUT_T, CTC_NCLASS] */
+                /* CTC 解码: 输出 [CTC_OUT_T, CTC_NCLASS] */
                 int tokens[32];
                 int nt = ctc_decode((float *)ctc_out.data, CTC_OUT_T, CTC_NCLASS, tokens, 32);
 
-                /* ── Classification ── */
+                /* ── 分类 ── */
                 int plate_type = -1;
                 {
                     float *cls_in = (float *)malloc(3 * CLS_IN_H * CLS_IN_W * sizeof(float));
                     resize_chw(roi_255, crop_h, crop_w, cls_in, CLS_IN_H, CLS_IN_W);
-                    /* normalize: /255.0 */
+                    /* 归一化: /255.0 */
                     for (int j = 0; j < 3 * CLS_IN_H * CLS_IN_W; j++)
                         cls_in[j] /= 255.0f;
 
@@ -575,8 +575,8 @@ extern "C" void *lpr_thread(void *arg)
                     free(cls_in);
                 }
 
-                /* ── Write result ── */
-                /* build plate string from CTC tokens */
+                /* ── 写入结果 ── */
+                /* 从 CTC tokens 构建车牌字符串 */
                 char plate_str[64] = {0};
                 int pos = 0;
                 for (int t = 0; t < nt && pos < 60; t++) {

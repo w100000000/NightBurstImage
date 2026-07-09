@@ -3,8 +3,8 @@
  *
  * 编译 (服务器):
  *   $CXX -O2 -o ncnn_bench ncnn_bench.cpp \
- *        -I/home/dc2026_2/ncnn/src -I/home/dc2026_2/ncnn/build/src \
- *        -L/home/dc2026_2/ncnn/build/src -lncnn -lpthread
+ *        -I<NCNN_ROOT>/src -I<NCNN_ROOT>/build/src \
+ *        -L<NCNN_ROOT>/build/src -lncnn -lpthread
  *
  * 单输入用法:
  *   ./ncnn_bench /mnt/sdcard/y5fu_320x_sim       320 320 3

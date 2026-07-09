@@ -1,13 +1,6 @@
 """
 IMX585 (ZWO ASI585MC) 三帧 RAW 融合数据集
 
-与原始 OV13855 dataset 的关键差异:
-  - Bayer 排列: RGGB (vs. OV13855 BGGR)
-  - 位深: 12-bit (vs. 10-bit)
-  - 文件格式: .npy uint16/float32 (vs. .raw packed)
-  - GT: RAW Bayer float32 200帧平均, 需 demosaic 转 RGB
-  - 分辨率: 3840×2160 full 4K
-
 目录结构:
     dataset/
     ├── 000000_<scene>/S1.npy  (uint16, 2160×3840)
@@ -94,7 +87,7 @@ class IMX585_RAW3RGB_dataset(data.Dataset):
 
         GT 是 200 帧平均 float32, 噪声极低, 边缘感知 demosaic 效果好。
         """
-        # clip & scale to 16-bit
+        # 裁剪并缩放到 16-bit
         bayer_clip = np.clip(bayer_raw, 0, max_val)
         bayer_16 = (bayer_clip / max_val * 65535.0).astype(np.uint16)
         # RGGB → RGB (边缘感知 demosaic)

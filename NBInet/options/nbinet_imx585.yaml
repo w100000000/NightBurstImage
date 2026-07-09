@@ -51,7 +51,7 @@ Optimizer:
 
 Dataset:
   dataset_type: 'imx585'
-  root_path: '/home/dc2026_2/dataset/raw_d2hnet_asi585mc'
+  root_path: '<DATASET_ROOT>/dataset/raw_d2hnet_asi585mc'
   input_format: 'raw_rggb'
   gt_format: 'rgb'
   max_val: 4095

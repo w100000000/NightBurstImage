@@ -15,7 +15,7 @@ import sys
 import time
 import os
 
-BOARD = "root@192.168.0.232"
+BOARD = "root@<BOARD_IP>"
 PLATES_FILE = "/mnt/sdcard/plates/plates.txt"
 
 

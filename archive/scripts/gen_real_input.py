@@ -11,9 +11,9 @@ Output:
 
 Pipeline:
     1. python gen_real_input.py --index 5
-    2. scp short_cat.bin long_raw.bin root@192.168.0.232:/tmp/
-    3. ssh root@192.168.0.232 ./nbinet_infer /tmp/nbinet.rknn /tmp/short_cat.bin /tmp/long_raw.bin /tmp/output.rgb
-    4. scp root@192.168.0.232:/tmp/output.rgb .
+    2. scp short_cat.bin long_raw.bin root@<BOARD_IP>:/tmp/
+    3. ssh root@<BOARD_IP> ./nbinet_infer /tmp/nbinet.rknn /tmp/short_cat.bin /tmp/long_raw.bin /tmp/output.rgb
+    4. scp root@<BOARD_IP>:/tmp/output.rgb .
     5. python vis.py output.rgb test_output.png
     6. Compare test_output.png with gt_rgb.png
 """
@@ -62,7 +62,7 @@ def main():
     parser.add_argument('--height', type=int, default=544, help='RAW crop height (must be mult of 8)')
     parser.add_argument('--width', type=int, default=960, help='RAW crop width')
     parser.add_argument('--dataset', type=str,
-                        default='/home/dc2026_2/dataset/raw_d2hnet_asi585mc',
+                        default='<DATASET_ROOT>/dataset/raw_d2hnet_asi585mc',
                         help='IMX585 dataset root')
     parser.add_argument('--crop_y', type=int, default=None, help='Manual crop y offset in RAW domain')
     parser.add_argument('--crop_x', type=int, default=None, help='Manual crop x offset in RAW domain')
@@ -164,9 +164,9 @@ def main():
     print(f"  s1_preview.png saved ({s1_uint8.shape[1]}×{s1_uint8.shape[0]}) — single short frame, no denoise")
 
     print("\nDone. Next steps:")
-    print("  scp short_cat.bin long_raw.bin root@192.168.0.232:/tmp/")
-    print("  ssh root@192.168.0.232 /tmp/nbinet_infer /tmp/nbinet.rknn /tmp/short_cat.bin /tmp/long_raw.bin /tmp/output.rgb")
-    print("  scp root@192.168.0.232:/tmp/output.rgb .")
+    print("  scp short_cat.bin long_raw.bin root@<BOARD_IP>:/tmp/")
+    print("  ssh root@<BOARD_IP> /tmp/nbinet_infer /tmp/nbinet.rknn /tmp/short_cat.bin /tmp/long_raw.bin /tmp/output.rgb")
+    print("  scp root@<BOARD_IP>:/tmp/output.rgb .")
     print("  python vis.py output.rgb test_output.png")
     print("  Compare: test_output.png (NPU output) vs gt_rgb.png (ground truth) vs s1_preview.png (noisy single frame)")
 

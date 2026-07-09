@@ -5,7 +5,7 @@ from torch.nn import Parameter
 
 
 # ----------------------------------------
-#               Conv2d Block
+#               Conv2d 层
 # ----------------------------------------
 class Conv2dLayer(nn.Module):
 
@@ -15,7 +15,7 @@ class Conv2dLayer(nn.Module):
         super(Conv2dLayer, self).__init__()
         self.layers = []
 
-        # Initialize the padding scheme
+        # 初始化填充方式
         p = padding
         if p > 0:
             if pad_type == 'reflect':
@@ -29,13 +29,13 @@ class Conv2dLayer(nn.Module):
             else:
                 raise NotImplementedError('padding type %s is not supported.' % pad_type)
 
-        # Initialize the convolution layers
+        # 初始化卷积层
         if sn:
             self.layers += [SpectralNorm(nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding = p, dilation = dilation))]
         else:
             self.layers += [nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding = p, dilation = dilation)]
 
-        # Initialize the normalization type
+        # 初始化归一化类型
         if norm == 'bn':
             self.layers += [nn.BatchNorm2d(out_channels)]
         elif norm == 'in':
@@ -47,7 +47,7 @@ class Conv2dLayer(nn.Module):
         else:
             raise NotImplementedError('norm layer %s is not supported.' % norm)
 
-        # Initialize the activation funtion
+        # 初始化激活函数
         if activation == 'relu':
             self.layers += [nn.ReLU(inplace = True)]
         elif activation == 'lrelu':

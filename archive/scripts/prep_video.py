@@ -81,11 +81,11 @@ def main():
 
     print(f"\n=== Deploy to board ===")
     print(f"1. Copy frames:")
-    print(f"   scp -r {out_dir} root@192.168.0.232:/tmp/")
+    print(f"   scp -r {out_dir} root@<BOARD_IP>:/tmp/")
     print(f"")
     print(f"2. Copy fb_player (cross-compile first):")
     print(f"   cd ~/NightBurstImage/rknn_infer/pipeline && make fb_player")
-    print(f"   scp fb_player root@192.168.0.232:/tmp/")
+    print(f"   scp fb_player root@<BOARD_IP>:/tmp/")
     print(f"")
     print(f"3. Run on board:")
     print(f"   killall weston 2>/dev/null")

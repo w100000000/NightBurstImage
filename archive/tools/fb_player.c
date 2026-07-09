@@ -3,7 +3,7 @@
  *
  * 配合 PC 端脚本使用:
  *   python3 prep_video.py input.mp4 frames/   # PC上转换
- *   scp -r frames/ root@192.168.0.232:/tmp/
+ *   scp -r frames/ root@<BOARD_IP>:/tmp/
  *   /tmp/fb_player /tmp/frames/ 30            # 30fps播放
  *
  * 编译 (板子上直接编译, 不需要交叉工具链):
